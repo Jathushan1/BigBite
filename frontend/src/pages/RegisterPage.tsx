@@ -11,8 +11,8 @@ import {
   Bike,
   ArrowLeft,
   ArrowRight,
-  UtensilsCrossed,
 } from 'lucide-react'
+import { Logo } from '../components/Logo'
 
 type PortalMode = 'customer' | 'partner'
 type StaffRole = 'branch-manager' | 'delivery-partner'
@@ -86,14 +86,14 @@ export const RegisterPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
+    <div className="min-h-screen bg-[#F8F9FA] text-neutral-900 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white border border-neutral-200/80 rounded-3xl p-8 shadow-xl space-y-6">
         {/* Back to Customer Button (only visible in Partner Mode) */}
         {mode === 'partner' && (
           <button
             type="button"
             onClick={() => handleSwitchMode('customer')}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-amber-400 transition mb-1"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-500 hover:text-[#E4002B] transition mb-1 cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Customer Registration
@@ -101,36 +101,27 @@ export const RegisterPage: React.FC = () => {
         )}
 
         {/* Header */}
-        <div className="text-center space-y-1">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 mb-2">
-            {mode === 'customer' ? (
-              <UtensilsCrossed className="w-6 h-6" />
-            ) : staffRole === 'branch-manager' ? (
-              <Building2 className="w-6 h-6" />
-            ) : (
-              <Bike className="w-6 h-6" />
-            )}
-          </div>
-          <h1 className="text-3xl font-extrabold text-amber-400 tracking-tight">BigBite</h1>
-          <p className="text-sm text-slate-300 font-medium">
+        <div className="text-center flex flex-col items-center space-y-2">
+          <Link to="/">
+            <Logo />
+          </Link>
+          <h1 className="text-2xl font-black text-neutral-900 tracking-tight pt-1">
+            {mode === 'customer' ? 'Create Customer Account' : 'Partner & Staff Portal'}
+          </h1>
+          <p className="text-xs text-neutral-500">
             {mode === 'customer'
-              ? 'Create your Customer Account'
-              : 'Partner & Staff Portal'}
-          </p>
-          <p className="text-xs text-slate-500">
-            {mode === 'customer'
-              ? 'Order freshly prepared gourmet food in seconds'
-              : 'Join our restaurant management operations or delivery fleet'}
+              ? 'Order freshly prepared gourmet pizzas in seconds'
+              : 'Join our restaurant management operations or courier fleet'}
           </p>
         </div>
 
         {/* Partner Mode: Staff Role Switcher */}
         {mode === 'partner' && (
           <div className="space-y-3">
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider text-center">
+            <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider text-center">
               Select Position to Apply For
             </label>
-            <div className="grid grid-cols-2 gap-2 bg-slate-800/80 p-1.5 rounded-xl border border-slate-700/60">
+            <div className="grid grid-cols-2 gap-2 bg-neutral-100 p-1.5 rounded-2xl border border-neutral-200">
               <button
                 type="button"
                 onClick={() => {
@@ -138,10 +129,10 @@ export const RegisterPage: React.FC = () => {
                   setError('')
                   setSuccessMsg('')
                 }}
-                className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
                   staffRole === 'branch-manager'
-                    ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-neutral-900 text-white shadow-sm'
+                    : 'text-neutral-600 hover:text-neutral-900'
                 }`}
               >
                 <Building2 className="w-4 h-4" />
@@ -154,10 +145,10 @@ export const RegisterPage: React.FC = () => {
                   setError('')
                   setSuccessMsg('')
                 }}
-                className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
                   staffRole === 'delivery-partner'
-                    ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-neutral-900 text-white shadow-sm'
+                    : 'text-neutral-600 hover:text-neutral-900'
                 }`}
               >
                 <Bike className="w-4 h-4" />
@@ -166,12 +157,10 @@ export const RegisterPage: React.FC = () => {
             </div>
 
             {/* Approval Notice */}
-            <div className="bg-amber-950/40 border border-amber-800/60 text-amber-300 px-3.5 py-2.5 rounded-xl text-xs flex items-start gap-2">
-              <Clock className="w-4 h-4 flex-shrink-0 text-amber-400 mt-0.5" />
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 px-3.5 py-2.5 rounded-2xl text-xs flex items-start gap-2">
+              <Clock className="w-4 h-4 flex-shrink-0 text-amber-600 mt-0.5" />
               <span>
-                <strong>Admin Approval Required:</strong>{' '}
-                {staffRole === 'branch-manager' ? 'Branch Manager' : 'Delivery Partner'} accounts
-                are reviewed by the SuperAdmin before login access is granted.
+                <strong>Admin Approval Required:</strong> Staff accounts are reviewed by the SuperAdmin before access is granted.
               </span>
             </div>
           </div>
@@ -179,21 +168,21 @@ export const RegisterPage: React.FC = () => {
 
         {/* Error Alert */}
         {error && (
-          <div className="bg-red-950/60 border border-red-800 text-red-300 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
-            <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-400 mt-0.5" />
-            <p className="font-medium">{error}</p>
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 text-[#E4002B] mt-0.5" />
+            <p className="font-bold">{error}</p>
           </div>
         )}
 
         {/* Success Alert */}
         {successMsg && (
-          <div className="bg-emerald-950/60 border border-emerald-800 text-emerald-300 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
-            <UserCheck className="w-5 h-5 flex-shrink-0 text-emerald-400 mt-0.5" />
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-2xl text-xs flex items-start gap-2">
+            <UserCheck className="w-4 h-4 flex-shrink-0 text-emerald-600 mt-0.5" />
             <div>
-              <p className="font-medium">{successMsg}</p>
-              <p className="text-xs text-emerald-300/80 mt-1">
+              <p className="font-bold">{successMsg}</p>
+              <p className="text-[11px] text-emerald-700 mt-1">
                 You can return to the{' '}
-                <Link to="/login" className="underline font-bold text-white hover:text-amber-300">
+                <Link to="/login" className="underline font-bold text-[#E4002B]">
                   Login Page
                 </Link>{' '}
                 once approved.
@@ -205,7 +194,7 @@ export const RegisterPage: React.FC = () => {
         {/* Registration Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+            <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-1.5">
               Full Name
             </label>
             <input
@@ -214,12 +203,12 @@ export const RegisterPage: React.FC = () => {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={mode === 'customer' ? 'Alice Johnson' : 'Your Legal Full Name'}
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-sm focus:outline-none focus:border-amber-500 transition"
+              className="w-full px-4 py-2.5 rounded-xl bg-neutral-50 border border-neutral-300 text-neutral-900 text-sm focus:outline-none focus:border-[#E4002B] focus:ring-2 focus:ring-red-100 transition"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+            <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-1.5">
               Email Address
             </label>
             <input
@@ -228,12 +217,12 @@ export const RegisterPage: React.FC = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="user@example.com"
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-sm focus:outline-none focus:border-amber-500 transition"
+              className="w-full px-4 py-2.5 rounded-xl bg-neutral-50 border border-neutral-300 text-neutral-900 text-sm focus:outline-none focus:border-[#E4002B] focus:ring-2 focus:ring-red-100 transition"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+            <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-1.5">
               Password (min. 6 characters)
             </label>
             <input
@@ -243,26 +232,24 @@ export const RegisterPage: React.FC = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-sm focus:outline-none focus:border-amber-500 transition"
+              className="w-full px-4 py-2.5 rounded-xl bg-neutral-50 border border-neutral-300 text-neutral-900 text-sm focus:outline-none focus:border-[#E4002B] focus:ring-2 focus:ring-red-100 transition"
             />
           </div>
 
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3 px-4 rounded-xl bg-amber-500 text-slate-950 font-bold text-sm hover:bg-amber-400 transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
+            className="w-full py-3.5 px-4 rounded-xl bg-[#E4002B] hover:bg-[#C40024] text-white font-extrabold text-sm transition shadow-lg shadow-red-600/20 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
           >
             {isLoading ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-950 border-t-transparent"></div>
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
             ) : (
               <>
-                <UserPlus className="w-4 h-4" />
+                <UserPlus className="w-4 h-4 stroke-[2.5]" />
                 <span>
                   {mode === 'customer'
                     ? 'Create Customer Account'
-                    : `Submit ${
-                        staffRole === 'branch-manager' ? 'Manager' : 'Rider'
-                      } Application`}
+                    : `Submit ${staffRole === 'branch-manager' ? 'Manager' : 'Rider'} Application`}
                 </span>
               </>
             )}
@@ -270,31 +257,28 @@ export const RegisterPage: React.FC = () => {
         </form>
 
         {/* Login Link */}
-        <div className="text-center text-xs text-slate-400 pt-1">
+        <div className="text-center text-xs text-neutral-500 pt-1">
           Already have an account?{' '}
-          <Link
-            to="/login"
-            className="text-amber-400 hover:text-amber-300 font-semibold underline underline-offset-4"
-          >
+          <Link to="/login" className="text-[#E4002B] hover:underline font-bold">
             Sign in
           </Link>
         </div>
 
-        {/* Customer View Only: Separate Section & Button for Staff/Partners */}
+        {/* Customer View Only: Staff/Partners CTA Card */}
         {mode === 'customer' && (
-          <div className="pt-4 border-t border-slate-800/80">
-            <div className="bg-slate-800/50 border border-slate-700/60 rounded-xl p-4 space-y-3">
-              <div className="flex items-center gap-2.5 text-slate-300">
-                <Building2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                <span className="text-xs font-semibold">Partner with BigBite</span>
+          <div className="pt-3 border-t border-neutral-100">
+            <div className="bg-neutral-50 border border-neutral-200/80 rounded-2xl p-4 space-y-2.5">
+              <div className="flex items-center gap-2 text-neutral-800">
+                <Building2 className="w-4 h-4 text-[#E4002B] flex-shrink-0" />
+                <span className="text-xs font-bold">Partner with BigBite</span>
               </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Looking to manage a restaurant branch or deliver orders as a courier partner? Apply through our dedicated staff portal.
+              <p className="text-xs text-neutral-500 leading-relaxed">
+                Looking to manage a branch or deliver hot pizzas as a courier partner? Apply through our staff portal.
               </p>
               <button
                 type="button"
                 onClick={() => handleSwitchMode('partner')}
-                className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700/90 text-amber-400 hover:text-amber-300 border border-slate-700 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition"
+                className="w-full py-2 px-3 bg-white hover:bg-neutral-100 text-[#E4002B] border border-neutral-200 rounded-xl text-xs font-bold inline-flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
               >
                 <span>Join as Delivery Partner or Branch Manager</span>
                 <ArrowRight className="w-3.5 h-3.5" />
