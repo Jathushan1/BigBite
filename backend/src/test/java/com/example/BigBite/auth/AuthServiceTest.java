@@ -6,10 +6,15 @@ import com.example.BigBite.auth.dto.RegisterRequestDto;
 import com.example.BigBite.auth.exception.AccountStatusException;
 import com.example.BigBite.auth.exception.EmailAlreadyExistsException;
 import com.example.BigBite.auth.security.JwtUtil;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import jakarta.validation.ValidatorFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -17,6 +22,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -37,22 +43,25 @@ class AuthServiceTest {
     @InjectMocks
     private AuthService authService;
 
+    private Validator validator;
     private RegisterRequestDto customerRegisterDto;
     private RegisterRequestDto staffRegisterDto;
 
     @BeforeEach
     void setUp() {
-        customerRegisterDto = new RegisterRequestDto("Alice Customer", "alice@example.com", "secret123");
-        staffRegisterDto = new RegisterRequestDto("Bob Manager", "bob@example.com", "secret123");
+        ValidatorFactory factory = Validation.buildDefaultValidatorFactory();
+        validator = factory.getValidator();
+        customerRegisterDto = new RegisterRequestDto("Alice Customer", "alice@example.com", "0771234567", "Secret@123");
+        staffRegisterDto = new RegisterRequestDto("Bob Manager", "bob@example.com", "+94771234567", "Secret@123");
     }
 
     @Test
     @DisplayName("Customer registration sets ACTIVE status and returns immediate JWT token")
     void testRegisterCustomer() {
         when(userRepository.existsByEmail("alice@example.com")).thenReturn(false);
-        when(passwordEncoder.encode("secret123")).thenReturn("encodedPassword");
+        when(passwordEncoder.encode("Secret@123")).thenReturn("encodedPassword");
 
-        User savedUser = new User("Alice Customer", "alice@example.com", "encodedPassword", Role.CUSTOMER, UserStatus.ACTIVE);
+        User savedUser = new User("Alice Customer", "alice@example.com", "0771234567", "encodedPassword", Role.CUSTOMER, UserStatus.ACTIVE);
         savedUser.setId(1L);
         when(userRepository.save(any(User.class))).thenReturn(savedUser);
         when(jwtUtil.generateToken(savedUser)).thenReturn("jwt.token.alice");
@@ -70,7 +79,7 @@ class AuthServiceTest {
     @DisplayName("Branch Manager registration sets PENDING_APPROVAL status and returns no token")
     void testRegisterBranchManager() {
         when(userRepository.existsByEmail("bob@example.com")).thenReturn(false);
-        when(passwordEncoder.encode("secret123")).thenReturn("encodedPassword");
+        when(passwordEncoder.encode("Secret@123")).thenReturn("encodedPassword");
 
         AuthResponseDto response = authService.registerBranchManager(staffRegisterDto);
 
@@ -84,9 +93,9 @@ class AuthServiceTest {
     @Test
     @DisplayName("Delivery Partner registration sets PENDING_APPROVAL status and returns no token")
     void testRegisterDeliveryPartner() {
-        RegisterRequestDto riderDto = new RegisterRequestDto("Rider Dan", "dan@example.com", "secret123");
+        RegisterRequestDto riderDto = new RegisterRequestDto("Rider Dan", "dan@example.com", "0771234567", "Secret@123");
         when(userRepository.existsByEmail("dan@example.com")).thenReturn(false);
-        when(passwordEncoder.encode("secret123")).thenReturn("encodedPassword");
+        when(passwordEncoder.encode("Secret@123")).thenReturn("encodedPassword");
 
         AuthResponseDto response = authService.registerDeliveryPartner(riderDto);
 
@@ -166,5 +175,74 @@ class AuthServiceTest {
         LoginRequestDto loginDto = new LoginRequestDto("alice@example.com", "wrongPassword");
 
         assertThrows(BadCredentialsException.class, () -> authService.login(loginDto));
+    }
+
+    @Test
+    @DisplayName("Weak password rejected by validation")
+    void testWeakPasswordRejected() {
+        // Missing special char
+        RegisterRequestDto dto1 = new RegisterRequestDto("Alice Customer", "alice@example.com", "0771234567", "Password12");
+        Set<ConstraintViolation<RegisterRequestDto>> violations1 = validator.validate(dto1);
+        assertTrue(violations1.stream().anyMatch(v -> v.getPropertyPath().toString().equals("password")));
+
+        // Missing uppercase
+        RegisterRequestDto dto2 = new RegisterRequestDto("Alice Customer", "alice@example.com", "0771234567", "password@12");
+        Set<ConstraintViolation<RegisterRequestDto>> violations2 = validator.validate(dto2);
+        assertTrue(violations2.stream().anyMatch(v -> v.getPropertyPath().toString().equals("password")));
+
+        // Less than 8 characters
+        RegisterRequestDto dto3 = new RegisterRequestDto("Alice Customer", "alice@example.com", "0771234567", "Pa1@");
+        Set<ConstraintViolation<RegisterRequestDto>> violations3 = validator.validate(dto3);
+        assertTrue(violations3.stream().anyMatch(v -> v.getPropertyPath().toString().equals("password")));
+    }
+
+    @Test
+    @DisplayName("Invalid Sri Lankan phone number rejected")
+    void testInvalidSriLankanPhoneRejected() {
+        // Double zero after +94 prefix
+        RegisterRequestDto dto1 = new RegisterRequestDto("Alice Customer", "alice@example.com", "+94071234567", "Secret@123");
+        Set<ConstraintViolation<RegisterRequestDto>> violations1 = validator.validate(dto1);
+        assertTrue(violations1.stream().anyMatch(v -> v.getPropertyPath().toString().equals("phoneNumber")));
+
+        // Too short
+        RegisterRequestDto dto2 = new RegisterRequestDto("Alice Customer", "alice@example.com", "0771234", "Secret@123");
+        Set<ConstraintViolation<RegisterRequestDto>> violations2 = validator.validate(dto2);
+        assertTrue(violations2.stream().anyMatch(v -> v.getPropertyPath().toString().equals("phoneNumber")));
+
+        // Invalid characters
+        RegisterRequestDto dto3 = new RegisterRequestDto("Alice Customer", "alice@example.com", "077123456a", "Secret@123");
+        Set<ConstraintViolation<RegisterRequestDto>> violations3 = validator.validate(dto3);
+        assertTrue(violations3.stream().anyMatch(v -> v.getPropertyPath().toString().equals("phoneNumber")));
+    }
+
+    @Test
+    @DisplayName("Valid Sri Lankan phone accepted in both local and international formats")
+    void testValidSriLankanPhoneAcceptedBothFormats() {
+        RegisterRequestDto localDto = new RegisterRequestDto("Alice Customer", "alice@example.com", "0771234567", "Secret@123");
+        Set<ConstraintViolation<RegisterRequestDto>> localViolations = validator.validate(localDto);
+        assertTrue(localViolations.stream().noneMatch(v -> v.getPropertyPath().toString().equals("phoneNumber")));
+
+        RegisterRequestDto intlDto = new RegisterRequestDto("Alice Customer", "alice@example.com", "+94771234567", "Secret@123");
+        Set<ConstraintViolation<RegisterRequestDto>> intlViolations = validator.validate(intlDto);
+        assertTrue(intlViolations.stream().noneMatch(v -> v.getPropertyPath().toString().equals("phoneNumber")));
+    }
+
+    @Test
+    @DisplayName("Customer registration properly saves provided phone number")
+    void testCustomerRegistrationPersistsPhoneNumber() {
+        when(userRepository.existsByEmail("alice@example.com")).thenReturn(false);
+        when(passwordEncoder.encode("Secret@123")).thenReturn("encodedSecret");
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        User mockSaved = new User("Alice Customer", "alice@example.com", "0771234567", "encodedSecret", Role.CUSTOMER, UserStatus.ACTIVE);
+        mockSaved.setId(1L);
+        when(userRepository.save(captor.capture())).thenReturn(mockSaved);
+        when(jwtUtil.generateToken(mockSaved)).thenReturn("token.jwt");
+
+        authService.registerCustomer(customerRegisterDto);
+
+        User captured = captor.getValue();
+        assertEquals("0771234567", captured.getPhoneNumber());
+        assertEquals("Alice Customer", captured.getName());
     }
 }

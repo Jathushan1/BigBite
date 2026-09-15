@@ -189,7 +189,7 @@ export function OrderStatusPage() {
               <span>Itemized Bill</span>
             </div>
             <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-stone-100 text-stone-700 border border-stone-200">
-              Payment: {order?.paymentStatus}
+              Payment: {order?.paymentStatus} {order?.paymentMethod ? `(${order.paymentMethod === 'CASH_ON_DELIVERY' ? 'Cash on Delivery' : 'Stripe Card'})` : ''}
             </span>
           </div>
 

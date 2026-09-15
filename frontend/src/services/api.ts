@@ -27,15 +27,16 @@ export async function loginApi(email: string, password: string): Promise<AuthRes
   return data
 }
 
-export async function registerCustomerApi(name: string, email: string, password: string): Promise<AuthResponse> {
+export async function registerCustomerApi(name: string, email: string, phoneNumber: string, password: string): Promise<AuthResponse> {
   const res = await fetch(`${API_BASE}/api/auth/register/customer`, {
     method: 'POST',
     headers: getHeaders(),
-    body: JSON.stringify({ name, email, password }),
+    body: JSON.stringify({ name, email, phoneNumber, password }),
   })
   const data = await res.json()
   if (!res.ok) {
-    throw new Error(data.message || 'Registration failed')
+    const errorMsg = data.errors ? Object.values(data.errors).join(', ') : data.message
+    throw new Error(errorMsg || 'Registration failed')
   }
   return data
 }
@@ -44,16 +45,18 @@ export async function registerStaffApi(
   variant: 'branch-manager' | 'delivery-partner',
   name: string,
   email: string,
+  phoneNumber: string,
   password: string
 ): Promise<AuthResponse> {
   const res = await fetch(`${API_BASE}/api/auth/register/${variant}`, {
     method: 'POST',
     headers: getHeaders(),
-    body: JSON.stringify({ name, email, password }),
+    body: JSON.stringify({ name, email, phoneNumber, password }),
   })
   const data = await res.json()
   if (!res.ok) {
-    throw new Error(data.message || 'Registration failed')
+    const errorMsg = data.errors ? Object.values(data.errors).join(', ') : data.message
+    throw new Error(errorMsg || 'Registration failed')
   }
   return data
 }

@@ -13,6 +13,7 @@ export interface MenuItem {
   branchId: number
   category: string
   description: string
+  available?: boolean
 }
 
 export const MOCK_BRANCHES: Branch[] = [
@@ -47,6 +48,7 @@ export const MOCK_MENU_ITEMS: MenuItem[] = [
     branchId: 1,
     category: 'Pizza',
     description: 'Classic mozzarella, basil, and san marzano tomato sauce on crispy hand-tossed dough.',
+    available: true,
   },
   {
     id: 102,
@@ -55,6 +57,7 @@ export const MOCK_MENU_ITEMS: MenuItem[] = [
     branchId: 1,
     category: 'Pizza',
     description: 'Generous slices of spicy Italian pepperoni, melted mozzarella, and rich tomato sauce.',
+    available: true,
   },
   {
     id: 103,
@@ -63,6 +66,7 @@ export const MOCK_MENU_ITEMS: MenuItem[] = [
     branchId: 1,
     category: 'Sides',
     description: 'Crispy French baguette slices coated with roasted garlic butter and aromatic herbs.',
+    available: true,
   },
   {
     id: 201,
@@ -71,6 +75,7 @@ export const MOCK_MENU_ITEMS: MenuItem[] = [
     branchId: 3,
     category: 'Pizza',
     description: 'Smoky grilled chicken, caramelized red onions, cilantro, and tangy barbecue sauce.',
+    available: true,
   },
   {
     id: 202,
@@ -79,5 +84,6 @@ export const MOCK_MENU_ITEMS: MenuItem[] = [
     branchId: 3,
     category: 'Beverages',
     description: 'Chilled 500ml bottle of classic Coca-Cola.',
+    available: true,
   },
 ]

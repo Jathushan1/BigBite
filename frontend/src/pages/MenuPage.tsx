@@ -92,17 +92,29 @@ export function MenuPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {branchMenuItems.map((item) => {
           const qty = getItemQuantityInCart(item.id)
+          const isItemAvailable = item.available !== false
 
           return (
             <div
               key={item.id}
-              className="bg-white border border-stone-200 hover:border-red-200 rounded-2xl p-6 flex flex-col justify-between shadow-xs hover:shadow-md transition-all duration-200"
+              className={`bg-white border rounded-2xl p-6 flex flex-col justify-between shadow-xs transition-all duration-200 ${
+                isItemAvailable
+                  ? 'border-stone-200 hover:border-red-200 hover:shadow-md'
+                  : 'border-stone-200/80 bg-stone-50/70 opacity-75'
+              }`}
             >
               <div>
                 <div className="flex items-start justify-between gap-2 mb-3">
-                  <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-red-50 text-[#E4002B] border border-red-100 uppercase tracking-wide">
-                    {item.category}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-red-50 text-[#E4002B] border border-red-100 uppercase tracking-wide">
+                      {item.category}
+                    </span>
+                    {!isItemAvailable && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-stone-200 text-stone-600">
+                        Out of Stock
+                      </span>
+                    )}
+                  </div>
                   <span className="text-lg font-black text-stone-900">
                     Rs. {item.price.toFixed(2)}
                   </span>
@@ -112,7 +124,15 @@ export function MenuPage() {
               </div>
 
               <div className="pt-2 border-t border-stone-100">
-                {qty > 0 ? (
+                {!isItemAvailable ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full py-2.5 px-4 rounded-xl bg-stone-200 text-stone-400 text-sm font-bold flex items-center justify-center gap-2 cursor-not-allowed border border-stone-200"
+                  >
+                    <span>Currently Unavailable</span>
+                  </button>
+                ) : qty > 0 ? (
                   <div className="flex items-center justify-between bg-stone-50 border border-stone-200 rounded-xl p-1.5">
                     <button
                       type="button"

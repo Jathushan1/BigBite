@@ -6,6 +6,7 @@ import com.example.BigBite.order.dto.OrderItemRequestDto;
 import com.example.BigBite.order.dto.OrderItemResponseDto;
 import com.example.BigBite.order.dto.OrderRequestDto;
 import com.example.BigBite.order.dto.OrderResponseDto;
+import com.example.BigBite.order.dto.PaymentRequestDto;
 import com.example.BigBite.order.external.BranchLookupService;
 import com.example.BigBite.order.external.InventoryCheckService;
 import com.example.BigBite.order.external.MenuLookupService;
@@ -300,19 +301,56 @@ public class OrderService {
     }
 
     public OrderResponseDto recordPayment(Long id, boolean success) {
+        return recordPayment(id, new PaymentRequestDto(PaymentMethod.CARD_STRIPE, success));
+    }
+
+    public OrderResponseDto recordPayment(Long id, PaymentRequestDto request) {
         Order order = findOrderOrThrow(id);
 
-        if (success) {
-            order.setPaymentStatus(PaymentStatus.VERIFIED);
-            if (order.getStatus() == OrderStatus.PLACED) {
-                order.setStatus(OrderStatus.PAYMENT_VERIFIED);
+        PaymentMethod method = (request != null && request.getPaymentMethod() != null)
+                ? request.getPaymentMethod()
+                : PaymentMethod.CARD_STRIPE;
+
+        if (method == PaymentMethod.CASH_ON_DELIVERY) {
+            BigDecimal codLimit = new BigDecimal("3000.00");
+            if (order.getGrandTotal().compareTo(codLimit) > 0) {
+                throw new IllegalArgumentException("Cash on Delivery is only allowed for orders up to LKR 3,000. Order total is LKR " + order.getGrandTotal());
             }
+            order.setPaymentMethod(PaymentMethod.CASH_ON_DELIVERY);
+            order.setPaymentStatus(PaymentStatus.PENDING);
+            order.setStatus(OrderStatus.CONFIRMED);
         } else {
-            order.setPaymentStatus(PaymentStatus.FAILED);
+            order.setPaymentMethod(PaymentMethod.CARD_STRIPE);
+            if (request != null && request.getStripePaymentIntentId() != null) {
+                order.setStripePaymentIntentId(request.getStripePaymentIntentId());
+            }
+
+            boolean isSuccessful = request != null && request.isSuccess();
+            if (isSuccessful) {
+                order.setPaymentStatus(PaymentStatus.VERIFIED);
+                order.setStatus(OrderStatus.CONFIRMED);
+            } else {
+                order.setPaymentStatus(PaymentStatus.FAILED);
+                // Order status stays in current state (PLACED), allowing the customer to retry
+            }
         }
 
         Order updated = orderRepository.save(order);
         return toOrderResponseDto(updated);
+    }
+
+    @Transactional(readOnly = true)
+    public com.example.BigBite.order.dto.PaymentIntentResponseDto createPaymentIntent(Long id) {
+        Order order = findOrderOrThrow(id);
+        String mockClientSecret = "pi_mock_" + order.getId() + "_" + System.currentTimeMillis() + "_secret_mock";
+        String publishableKey = "pk_test_bigbite_sandbox";
+        return new com.example.BigBite.order.dto.PaymentIntentResponseDto(
+                mockClientSecret,
+                publishableKey,
+                order.getId(),
+                order.getGrandTotal(),
+                "lkr"
+        );
     }
 
     private void validateTransition(Order order, OrderStatus current, OrderStatus next) {
@@ -321,7 +359,7 @@ public class OrderService {
         }
 
         boolean isValid = switch (current) {
-            case PLACED -> next == OrderStatus.PAYMENT_VERIFIED;
+            case PLACED -> next == OrderStatus.PAYMENT_VERIFIED || next == OrderStatus.CONFIRMED;
             case PAYMENT_VERIFIED -> next == OrderStatus.CONFIRMED;
             case CONFIRMED -> next == OrderStatus.PREPARING;
             case PREPARING -> {
@@ -331,7 +369,7 @@ public class OrderService {
                     yield next == OrderStatus.READY_FOR_PICKUP;
                 }
             }
-            case OUT_FOR_DELIVERY -> next == OrderStatus.DELIVERED;
+            case OUT_FOR_DELIVERY -> next == OrderStatus.DELIVERED || next == OrderStatus.COMPLETED;
             case DELIVERED, READY_FOR_PICKUP -> next == OrderStatus.COMPLETED;
             default -> false;
         };
@@ -380,6 +418,7 @@ public class OrderService {
         dto.setGrandTotal(order.getGrandTotal());
         dto.setPromoCode(order.getPromoCode());
         dto.setPaymentStatus(order.getPaymentStatus());
+        dto.setPaymentMethod(order.getPaymentMethod());
         dto.setCreatedAt(order.getCreatedAt());
         dto.setUpdatedAt(order.getUpdatedAt());
 

@@ -116,6 +116,11 @@ export function OrderHistoryPage() {
                   <span className="text-xs px-2.5 py-0.5 rounded-md bg-stone-100 text-stone-600 font-bold uppercase">
                     {order.fulfillmentType}
                   </span>
+                  {order.paymentMethod && (
+                    <span className="text-xs px-2.5 py-0.5 rounded-md bg-stone-100 text-stone-600 font-semibold">
+                      {order.paymentMethod === 'CASH_ON_DELIVERY' ? 'COD' : 'Card'}
+                    </span>
+                  )}
                 </div>
 
                 <p className="text-xs text-stone-500">

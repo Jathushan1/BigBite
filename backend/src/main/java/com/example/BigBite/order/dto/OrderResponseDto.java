@@ -2,6 +2,7 @@ package com.example.BigBite.order.dto;
 
 import com.example.BigBite.order.FulfillmentType;
 import com.example.BigBite.order.OrderStatus;
+import com.example.BigBite.order.PaymentMethod;
 import com.example.BigBite.order.PaymentStatus;
 
 import java.math.BigDecimal;
@@ -28,6 +29,7 @@ public class OrderResponseDto {
     private BigDecimal grandTotal;
     private String promoCode;
     private PaymentStatus paymentStatus;
+    private PaymentMethod paymentMethod;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<OrderItemResponseDto> items;
@@ -177,6 +179,14 @@ public class OrderResponseDto {
 
     public void setPaymentStatus(PaymentStatus paymentStatus) {
         this.paymentStatus = paymentStatus;
+    }
+
+    public PaymentMethod getPaymentMethod() {
+        return paymentMethod;
+    }
+
+    public void setPaymentMethod(PaymentMethod paymentMethod) {
+        this.paymentMethod = paymentMethod;
     }
 
     public LocalDateTime getCreatedAt() {

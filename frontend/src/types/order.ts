@@ -13,6 +13,22 @@ export type FulfillmentType = 'DELIVERY' | 'TAKEAWAY'
 
 export type PaymentStatus = 'PENDING' | 'VERIFIED' | 'FAILED'
 
+export type PaymentMethod = 'CASH_ON_DELIVERY' | 'CARD_STRIPE'
+
+export interface PaymentRequest {
+  paymentMethod: PaymentMethod
+  stripePaymentIntentId?: string
+  success?: boolean
+}
+
+export interface PaymentIntentResponse {
+  clientSecret: string
+  publishableKey: string
+  orderId: number
+  amount: number
+  currency: string
+}
+
 export interface OrderItemRequest {
   menuItemId: number
   quantity: number
@@ -62,6 +78,7 @@ export interface OrderResponse {
   grandTotal: number
   promoCode?: string | null
   paymentStatus: PaymentStatus
+  paymentMethod?: PaymentMethod
   createdAt: string
   updatedAt: string
   items: OrderItemResponse[]

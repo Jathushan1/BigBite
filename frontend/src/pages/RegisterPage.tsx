@@ -27,6 +27,7 @@ export const RegisterPage: React.FC = () => {
   // Form Fields
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [phoneNumber, setPhoneNumber] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
@@ -35,12 +36,17 @@ export const RegisterPage: React.FC = () => {
   const { login, getRoleLandingPath } = useAuth()
   const navigate = useNavigate()
 
+  const SRI_LANKAN_PHONE_REGEX = /^(?:\+94|0)[1-9][0-9]{8}$/
+  const STRONG_PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/
+  const NAME_REGEX = /^[a-zA-Z ]+$/
+
   const handleSwitchMode = (newMode: PortalMode) => {
     setMode(newMode)
     setError('')
     setSuccessMsg('')
     setName('')
     setEmail('')
+    setPhoneNumber('')
     setPassword('')
     if (newMode === 'partner') {
       setSearchParams({ mode: 'partner' })
@@ -53,17 +59,36 @@ export const RegisterPage: React.FC = () => {
     e.preventDefault()
     setError('')
     setSuccessMsg('')
+
+    // Validate Name
+    if (!name.trim() || name.trim().length < 2 || !NAME_REGEX.test(name.trim())) {
+      setError('Name must contain at least 2 characters and only letters and spaces.')
+      return
+    }
+
+    // Validate Sri Lankan Phone
+    if (!phoneNumber.trim() || !SRI_LANKAN_PHONE_REGEX.test(phoneNumber.trim())) {
+      setError('Invalid Sri Lankan phone number. Use format 07XXXXXXXX or +947XXXXXXXX.')
+      return
+    }
+
+    // Validate Strong Password
+    if (!STRONG_PASSWORD_REGEX.test(password)) {
+      setError('Password must be at least 8 characters and include uppercase, lowercase, number, and special character (@$!%*?&#).')
+      return
+    }
+
     setIsLoading(true)
 
     try {
       if (mode === 'customer') {
-        await registerCustomerApi(name, email, password)
+        await registerCustomerApi(name.trim(), email.trim(), phoneNumber.trim(), password)
         // Auto-login customer and redirect to home
-        const role = await login(email, password)
+        const role = await login(email.trim(), password)
         navigate(getRoleLandingPath(role))
       } else {
         // Staff application (Branch Manager or Delivery Partner)
-        const res = await registerStaffApi(staffRole, name, email, password)
+        const res = await registerStaffApi(staffRole, name.trim(), email.trim(), phoneNumber.trim(), password)
         setSuccessMsg(
           res.message ||
             `Your ${
@@ -72,6 +97,7 @@ export const RegisterPage: React.FC = () => {
         )
         setName('')
         setEmail('')
+        setPhoneNumber('')
         setPassword('')
       }
     } catch (err: unknown) {
@@ -223,17 +249,35 @@ export const RegisterPage: React.FC = () => {
 
           <div>
             <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-1.5">
-              Password (min. 6 characters)
+              Phone Number (Sri Lanka)
+            </label>
+            <input
+              type="tel"
+              required
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              placeholder="0771234567 or +94771234567"
+              className="w-full px-4 py-2.5 rounded-xl bg-neutral-50 border border-neutral-300 text-neutral-900 text-sm focus:outline-none focus:border-[#E4002B] focus:ring-2 focus:ring-red-100 transition"
+            />
+            <p className="text-[11px] text-neutral-500 mt-1">Format: 07XXXXXXXX or +947XXXXXXXX</p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-1.5">
+              Password (min. 8 characters)
             </label>
             <input
               type="password"
               required
-              minLength={6}
+              minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               className="w-full px-4 py-2.5 rounded-xl bg-neutral-50 border border-neutral-300 text-neutral-900 text-sm focus:outline-none focus:border-[#E4002B] focus:ring-2 focus:ring-red-100 transition"
             />
+            <p className="text-[11px] text-neutral-500 mt-1">
+              Must include uppercase, lowercase, digit, and special symbol (@$!%*?&#)
+            </p>
           </div>
 
           <button

@@ -4,6 +4,7 @@ import com.example.BigBite.order.dto.BillDto;
 import com.example.BigBite.order.dto.OrderItemRequestDto;
 import com.example.BigBite.order.dto.OrderRequestDto;
 import com.example.BigBite.order.dto.OrderResponseDto;
+import com.example.BigBite.order.dto.PaymentRequestDto;
 import com.example.BigBite.order.external.BranchLookupService;
 import com.example.BigBite.order.external.InventoryCheckService;
 import com.example.BigBite.order.external.MenuLookupService;
@@ -317,7 +318,7 @@ class OrderServiceTest {
         OrderResponseDto response = orderService.recordPayment(15L, true);
 
         assertEquals(PaymentStatus.VERIFIED, response.getPaymentStatus());
-        assertEquals(OrderStatus.PAYMENT_VERIFIED, response.getStatus());
+        assertEquals(OrderStatus.CONFIRMED, response.getStatus());
 
         // Test payment failure
         Order order2 = new Order();
@@ -330,6 +331,37 @@ class OrderServiceTest {
         OrderResponseDto failResponse = orderService.recordPayment(16L, false);
         assertEquals(PaymentStatus.FAILED, failResponse.getPaymentStatus());
         assertEquals(OrderStatus.PLACED, failResponse.getStatus());
+    }
+
+    @Test
+    @DisplayName("Cash on delivery succeeds under 3000 limit and fails when exceeding 3000")
+    void testCodPaymentLimit() {
+        // Order under 3000
+        Order orderUnder = new Order();
+        orderUnder.setId(20L);
+        orderUnder.setStatus(OrderStatus.PLACED);
+        orderUnder.setGrandTotal(new BigDecimal("2500.00"));
+        orderUnder.setPaymentStatus(PaymentStatus.PENDING);
+
+        when(orderRepository.findById(20L)).thenReturn(Optional.of(orderUnder));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PaymentRequestDto codReq = new PaymentRequestDto(PaymentMethod.CASH_ON_DELIVERY, true);
+        OrderResponseDto response = orderService.recordPayment(20L, codReq);
+
+        assertEquals(OrderStatus.CONFIRMED, response.getStatus());
+        assertEquals(PaymentMethod.CASH_ON_DELIVERY, response.getPaymentMethod());
+
+        // Order over 3000
+        Order orderOver = new Order();
+        orderOver.setId(21L);
+        orderOver.setStatus(OrderStatus.PLACED);
+        orderOver.setGrandTotal(new BigDecimal("3500.00"));
+        orderOver.setPaymentStatus(PaymentStatus.PENDING);
+
+        when(orderRepository.findById(21L)).thenReturn(Optional.of(orderOver));
+
+        assertThrows(IllegalArgumentException.class, () -> orderService.recordPayment(21L, codReq));
     }
 
     @Test

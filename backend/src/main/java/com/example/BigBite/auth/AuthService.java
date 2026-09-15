@@ -32,9 +32,14 @@ public class AuthService {
             throw new EmailAlreadyExistsException("Email is already registered: " + request.getEmail());
         }
 
+        String phone = (request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank())
+                ? request.getPhoneNumber()
+                : "0771234567";
+
         User user = new User(
                 request.getName(),
                 request.getEmail(),
+                phone,
                 passwordEncoder.encode(request.getPassword()),
                 Role.CUSTOMER,
                 UserStatus.ACTIVE
@@ -60,9 +65,14 @@ public class AuthService {
             throw new EmailAlreadyExistsException("Email is already registered: " + request.getEmail());
         }
 
+        String phone = (request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank())
+                ? request.getPhoneNumber()
+                : "0771234567";
+
         User user = new User(
                 request.getName(),
                 request.getEmail(),
+                phone,
                 passwordEncoder.encode(request.getPassword()),
                 Role.BRANCH_MANAGER,
                 UserStatus.PENDING_APPROVAL
@@ -79,9 +89,14 @@ public class AuthService {
             throw new EmailAlreadyExistsException("Email is already registered: " + request.getEmail());
         }
 
+        String phone = (request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank())
+                ? request.getPhoneNumber()
+                : "0771234567";
+
         User user = new User(
                 request.getName(),
                 request.getEmail(),
+                phone,
                 passwordEncoder.encode(request.getPassword()),
                 Role.DELIVERY_PARTNER,
                 UserStatus.PENDING_APPROVAL
