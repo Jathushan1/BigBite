@@ -1,6 +1,14 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
 import { CartProvider } from './context/CartContext'
+import { ProtectedRoute } from './components/ProtectedRoute'
 import { Navbar } from './components/Navbar'
+import { LoginPage } from './pages/LoginPage'
+import { RegisterPage } from './pages/RegisterPage'
+import { CustomerHome } from './pages/CustomerHome'
+import { AdminDashboard } from './pages/AdminDashboard'
+import { BranchManagerDashboard } from './pages/BranchManagerDashboard'
+import { DeliveryDashboard } from './pages/DeliveryDashboard'
 import { BranchSelectPage } from './pages/BranchSelectPage'
 import { MenuPage } from './pages/MenuPage'
 import { CartPage } from './pages/CartPage'
@@ -13,23 +21,129 @@ import { StaffOrderListPage } from './pages/StaffOrderListPage'
 export default function App() {
   return (
     <BrowserRouter>
-      <CartProvider>
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
-          <Navbar />
-          <main className="flex-1">
-            <Routes>
-              <Route path="/" element={<BranchSelectPage />} />
-              <Route path="/branch/:branchId/menu" element={<MenuPage />} />
-              <Route path="/cart" element={<CartPage />} />
-              <Route path="/checkout" element={<CheckoutPage />} />
-              <Route path="/order/:orderId/payment" element={<PaymentPage />} />
-              <Route path="/order/:orderId" element={<OrderStatusPage />} />
-              <Route path="/orders" element={<OrderHistoryPage />} />
-              <Route path="/staff/orders" element={<StaffOrderListPage />} />
-            </Routes>
-          </main>
-        </div>
-      </CartProvider>
+      <AuthProvider>
+        <CartProvider>
+          <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
+            <Navbar />
+            <main className="flex-1">
+              <Routes>
+                {/* Public Authentication Routes */}
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+
+                {/* Customer Portal */}
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
+                      <CustomerHome />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/order"
+                  element={
+                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
+                      <BranchSelectPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/branch/:branchId/menu"
+                  element={
+                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
+                      <MenuPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/cart"
+                  element={
+                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
+                      <CartPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/checkout"
+                  element={
+                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
+                      <CheckoutPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/order/:orderId/payment"
+                  element={
+                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
+                      <PaymentPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/order/:orderId"
+                  element={
+                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
+                      <OrderStatusPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/orders"
+                  element={
+                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
+                      <OrderHistoryPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Super Admin Dashboard */}
+                <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                      <AdminDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Branch Manager Dashboard */}
+                <Route
+                  path="/branch-manager/dashboard"
+                  element={
+                    <ProtectedRoute allowedRoles={['BRANCH_MANAGER']}>
+                      <BranchManagerDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Delivery Partner Dashboard */}
+                <Route
+                  path="/delivery/dashboard"
+                  element={
+                    <ProtectedRoute allowedRoles={['DELIVERY_PARTNER']}>
+                      <DeliveryDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Staff Order List */}
+                <Route
+                  path="/staff/orders"
+                  element={
+                    <ProtectedRoute allowedRoles={['BRANCH_MANAGER', 'DELIVERY_PARTNER']}>
+                      <StaffOrderListPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Fallback */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </main>
+          </div>
+        </CartProvider>
+      </AuthProvider>
     </BrowserRouter>
   )
 }
