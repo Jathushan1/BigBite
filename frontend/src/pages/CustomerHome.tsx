@@ -1,27 +1,28 @@
 import React from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { LogOut, Utensils, ShoppingBag, Shield } from 'lucide-react'
+import { LogOut, ShoppingBag, Shield, Store, Clock, ArrowRight } from 'lucide-react'
+import { Logo } from '../components/Logo'
 
 export const CustomerHome: React.FC = () => {
   const { user, logout } = useAuth()
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* Top Navigation */}
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <Utensils className="w-6 h-6 text-amber-500" />
-          <span className="font-extrabold text-xl text-amber-400 tracking-tight">BigBite</span>
-        </div>
+    <div className="min-h-screen bg-[#F8F9FA] text-neutral-900 flex flex-col font-sans">
+      {/* Top Customer Header */}
+      <header className="border-b border-neutral-200 bg-white/95 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-xs">
+        <Link to="/" className="flex items-center group transition-transform hover:scale-[1.02]">
+          <Logo />
+        </Link>
 
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <p className="text-sm font-semibold text-slate-200">{user?.name}</p>
-            <p className="text-xs text-amber-400 font-medium">Customer</p>
+            <p className="text-sm font-extrabold text-neutral-900">{user?.name}</p>
+            <p className="text-xs text-[#E4002B] font-bold">Valued Customer</p>
           </div>
           <button
             onClick={logout}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+            className="p-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 hover:text-neutral-900 transition cursor-pointer"
             title="Logout"
           >
             <LogOut className="w-4 h-4" />
@@ -31,50 +32,74 @@ export const CustomerHome: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 max-w-5xl w-full mx-auto p-6 space-y-8">
-        <div className="bg-gradient-to-r from-amber-500/10 via-amber-600/5 to-transparent border border-amber-500/20 rounded-3xl p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <span className="px-3 py-1 bg-amber-500/20 text-amber-300 rounded-full text-xs font-semibold uppercase tracking-wider">
+        {/* Welcome Hero Banner */}
+        <div className="bg-gradient-to-r from-red-600 to-[#E4002B] text-white rounded-3xl p-8 sm:p-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl shadow-red-600/15">
+          <div className="space-y-3 max-w-xl">
+            <span className="px-3.5 py-1 bg-white/20 text-white rounded-full text-xs font-black uppercase tracking-wider backdrop-blur-xs">
               Customer Portal
             </span>
-            <h1 className="text-3xl font-bold text-white">Welcome back, {user?.name}!</h1>
-            <p className="text-sm text-slate-400 max-w-lg">
-              Explore our freshly prepared gourmet dishes, track your orders in real time, and enjoy seamless delivery right to your door.
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
+              Welcome back, {user?.name}!
+            </h1>
+            <p className="text-sm sm:text-base text-red-100 font-medium leading-relaxed">
+              Hungry for hot, oven-baked pizza? Choose your favorite branch, pick your toppings, and get fast delivery in 30 minutes.
             </p>
           </div>
-          <div className="flex gap-3">
-            <button className="px-5 py-2.5 rounded-xl bg-amber-500 text-slate-950 font-bold text-sm hover:bg-amber-400 transition flex items-center gap-2">
-              <ShoppingBag className="w-4 h-4" />
-              Order Food
-            </button>
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+            <Link
+              to="/order"
+              className="px-6 py-3.5 rounded-2xl bg-white hover:bg-neutral-100 text-[#E4002B] font-black text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+            >
+              <ShoppingBag className="w-4 h-4 stroke-[2.5]" />
+              <span>Order Food</span>
+              <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+            </Link>
           </div>
         </div>
 
-        {/* User Account Info Card */}
+        {/* Dashboard Quick Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <Shield className="w-5 h-5" />
+          <div className="bg-white border border-neutral-200/80 rounded-3xl p-6 space-y-3 shadow-xs hover:shadow-md transition">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 text-[#E4002B] flex items-center justify-center">
+              <Shield className="w-6 h-6" />
             </div>
-            <h3 className="font-bold text-slate-200">Account Status</h3>
-            <p className="text-xs text-slate-400">Status: <span className="text-emerald-400 font-semibold">{user?.status}</span></p>
-            <p className="text-xs text-slate-400">Email: {user?.email}</p>
+            <h3 className="font-extrabold text-neutral-900 text-lg">Account Profile</h3>
+            <p className="text-xs text-neutral-600">
+              Account Status:{' '}
+              <span className="text-emerald-600 font-bold px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200">
+                {user?.status}
+              </span>
+            </p>
+            <p className="text-xs text-neutral-500 truncate">Email: {user?.email}</p>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <ShoppingBag className="w-5 h-5" />
+          <Link
+            to="/orders"
+            className="bg-white border border-neutral-200/80 rounded-3xl p-6 space-y-3 shadow-xs hover:shadow-md hover:border-[#E4002B]/40 transition group cursor-pointer"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-red-50 text-[#E4002B] flex items-center justify-center group-hover:bg-[#E4002B] group-hover:text-white transition">
+              <Clock className="w-6 h-6" />
             </div>
-            <h3 className="font-bold text-slate-200">Active Orders</h3>
-            <p className="text-xs text-slate-400">No active orders right now.</p>
-          </div>
+            <div className="flex items-center justify-between">
+              <h3 className="font-extrabold text-neutral-900 text-lg">Order History</h3>
+              <ArrowRight className="w-4 h-4 text-neutral-400 group-hover:text-[#E4002B] group-hover:translate-x-1 transition" />
+            </div>
+            <p className="text-xs text-neutral-500">Track active deliveries and view previous receipts.</p>
+          </Link>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <Utensils className="w-5 h-5" />
+          <Link
+            to="/order"
+            className="bg-white border border-neutral-200/80 rounded-3xl p-6 space-y-3 shadow-xs hover:shadow-md hover:border-[#E4002B]/40 transition group cursor-pointer"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-red-50 text-[#E4002B] flex items-center justify-center group-hover:bg-[#E4002B] group-hover:text-white transition">
+              <Store className="w-6 h-6" />
             </div>
-            <h3 className="font-bold text-slate-200">Favorite Restaurants</h3>
-            <p className="text-xs text-slate-400">Your saved branches and dishes will appear here.</p>
-          </div>
+            <div className="flex items-center justify-between">
+              <h3 className="font-extrabold text-neutral-900 text-lg">Branches & Menu</h3>
+              <ArrowRight className="w-4 h-4 text-neutral-400 group-hover:text-[#E4002B] group-hover:translate-x-1 transition" />
+            </div>
+            <p className="text-xs text-neutral-500">Browse Colombo, Kandy, and nearby BigBite kitchens.</p>
+          </Link>
         </div>
       </main>
     </div>

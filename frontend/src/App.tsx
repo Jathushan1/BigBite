@@ -2,10 +2,10 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { CartProvider } from './context/CartContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { RootRouteResolver } from './components/RootRouteResolver'
 import { Navbar } from './components/Navbar'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
-import { CustomerHome } from './pages/CustomerHome'
 import { AdminDashboard } from './pages/AdminDashboard'
 import { BranchManagerDashboard } from './pages/BranchManagerDashboard'
 import { DeliveryDashboard } from './pages/DeliveryDashboard'
@@ -23,23 +23,18 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <CartProvider>
-          <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
+          <div className="min-h-screen bg-[#F8F9FA] text-neutral-900 flex flex-col font-sans selection:bg-[#E4002B] selection:text-white">
             <Navbar />
             <main className="flex-1">
               <Routes>
+                {/* Dynamic Root Route based on Auth State */}
+                <Route path="/" element={<RootRouteResolver />} />
+
                 {/* Public Authentication Routes */}
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
 
-                {/* Customer Portal */}
-                <Route
-                  path="/"
-                  element={
-                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
-                      <CustomerHome />
-                    </ProtectedRoute>
-                  }
-                />
+                {/* Customer Ordering Portal */}
                 <Route
                   path="/order"
                   element={

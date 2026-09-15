@@ -1,50 +1,54 @@
 import { Link, useLocation } from 'react-router-dom'
-import { ShoppingBag, UtensilsCrossed, Clock, ShieldCheck } from 'lucide-react'
+import { ShoppingBag, Clock, ShieldCheck } from 'lucide-react'
 import { useCart } from '../context/CartContext'
+import { useAuth } from '../context/AuthContext'
+import { Logo } from './Logo'
 
 export function Navbar() {
   const { totalCount } = useCart()
+  const { user } = useAuth()
   const location = useLocation()
 
+  // On the welcome landing page (/ when not logged in), the welcome page provides its own marketing header
+  if (location.pathname === '/' && !user) {
+    return null
+  }
+
   const isActive = (path: string) => {
-    if (path === '/' && location.pathname === '/') return true
-    if (path !== '/' && location.pathname.startsWith(path)) return true
+    if (path === '/order' && location.pathname.startsWith('/order') && !location.pathname.startsWith('/orders')) return true
+    if (path === '/orders' && location.pathname.startsWith('/orders')) return true
+    if (path === '/staff/orders' && location.pathname.startsWith('/staff')) return true
     return false
   }
 
   return (
-    <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur border-b border-slate-800">
+    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-neutral-200 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Brand Logo */}
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/20 group-hover:scale-105 transition-transform">
-              <UtensilsCrossed className="w-6 h-6 text-slate-950 stroke-[2.5]" />
-            </div>
-            <span className="text-xl font-black tracking-tight text-white">
-              Big<span className="text-amber-400">Bite</span>
-            </span>
+        <div className="flex items-center justify-between h-18">
+          {/* Red and White Logo */}
+          <Link to="/" className="flex items-center group transition-transform hover:scale-[1.02]">
+            <Logo />
           </Link>
 
           {/* Navigation Links */}
-          <nav className="flex items-center gap-1 sm:gap-4">
+          <nav className="flex items-center gap-1 sm:gap-3">
             <Link
-              to="/"
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                isActive('/') && !location.pathname.startsWith('/orders') && !location.pathname.startsWith('/staff')
-                  ? 'bg-slate-800 text-amber-400'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+              to="/order"
+              className={`px-3.5 py-2 rounded-xl text-sm font-bold transition ${
+                isActive('/order')
+                  ? 'bg-red-50 text-[#E4002B]'
+                  : 'text-neutral-700 hover:text-[#E4002B] hover:bg-neutral-100/70'
               }`}
             >
-              Branches
+              Order Now
             </Link>
 
             <Link
               to="/orders"
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold transition ${
                 isActive('/orders')
-                  ? 'bg-slate-800 text-amber-400'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+                  ? 'bg-red-50 text-[#E4002B]'
+                  : 'text-neutral-700 hover:text-[#E4002B] hover:bg-neutral-100/70'
               }`}
             >
               <Clock className="w-4 h-4" />
@@ -53,25 +57,25 @@ export function Navbar() {
 
             <Link
               to="/staff/orders"
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                isActive('/staff')
-                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                  : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800/50'
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold transition ${
+                isActive('/staff/orders')
+                  ? 'bg-neutral-900 text-white'
+                  : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100/70'
               }`}
             >
-              <ShieldCheck className="w-4 h-4 text-amber-400" />
+              <ShieldCheck className="w-4 h-4 text-[#E4002B]" />
               <span>Staff Hub</span>
             </Link>
 
-            {/* Cart Button */}
+            {/* Red Cart Button */}
             <Link
               to="/cart"
-              className="relative ml-2 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-sm shadow-md shadow-amber-500/15 transition-all active:scale-95"
+              className="relative ml-2 flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#E4002B] hover:bg-[#C40024] text-white font-black text-sm shadow-md shadow-red-600/20 transition-all active:scale-95"
             >
               <ShoppingBag className="w-4 h-4 stroke-[2.5]" />
               <span className="hidden sm:inline">Cart</span>
               {totalCount > 0 && (
-                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-slate-950 text-amber-400 text-xs font-black">
+                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-white text-[#E4002B] text-xs font-black shadow-xs">
                   {totalCount}
                 </span>
               )}
