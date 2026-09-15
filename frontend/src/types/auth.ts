@@ -6,6 +6,7 @@ export interface User {
   id: number
   name: string
   email: string
+  phoneNumber?: string
   role: Role
   status: UserStatus
   branchId?: number | null
@@ -21,6 +22,7 @@ export interface AuthResponse {
   id?: number
   name?: string
   email?: string
+  phoneNumber?: string
   role?: Role
   status?: UserStatus
   branchId?: number | null

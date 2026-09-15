@@ -81,6 +81,19 @@ public class OrderController {
         return ResponseEntity.ok(updated);
     }
 
+    @GetMapping("/addresses")
+    public ResponseEntity<List<SavedAddress>> getSavedAddresses(@RequestParam Long customerId) {
+        return ResponseEntity.ok(orderService.getSavedAddresses(customerId));
+    }
+
+    @PostMapping("/addresses")
+    public ResponseEntity<SavedAddress> saveAddress(
+            @RequestParam Long customerId,
+            @RequestParam String addressLine,
+            @RequestParam(required = false) String city) {
+        return ResponseEntity.ok(orderService.saveAddress(customerId, addressLine, city));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(

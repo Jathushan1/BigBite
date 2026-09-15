@@ -14,12 +14,14 @@ interface CartContextType {
   promoCode: string
   fulfillmentType: FulfillmentType
   deliveryAddress: string
+  city: string
   addItem: (item: { menuItemId: number; name: string; price: number }, itemBranchId: number) => void
   removeItem: (menuItemId: number) => void
   updateQuantity: (menuItemId: number, delta: number) => void
   applyPromoCode: (code: string) => void
   setFulfillmentType: (type: FulfillmentType) => void
   setDeliveryAddress: (address: string) => void
+  setCity: (city: string) => void
   setBranchId: (branchId: number) => void
   clearCart: () => void
   subtotal: number
@@ -38,6 +40,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [promoCode, setPromoCode] = useState<string>('')
   const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>('DELIVERY')
   const [deliveryAddress, setDeliveryAddress] = useState<string>('')
+  const [city, setCity] = useState<string>('Colombo')
 
   const addItem = (item: { menuItemId: number; name: string; price: number }, itemBranchId: number) => {
     // If switching branches, reset items to ensure single-branch order integrity
@@ -87,6 +90,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems([])
     setPromoCode('')
     setDeliveryAddress('')
+    setCity('Colombo')
   }
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
@@ -105,12 +109,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
         promoCode,
         fulfillmentType,
         deliveryAddress,
+        city,
         addItem,
         removeItem,
         updateQuantity,
         applyPromoCode,
         setFulfillmentType,
         setDeliveryAddress,
+        setCity,
         setBranchId,
         clearCart,
         subtotal,

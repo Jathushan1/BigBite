@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router-dom'
-import { Plus, Minus, ArrowRight, ShoppingBag, MapPin, ArrowLeft } from 'lucide-react'
+import { Plus, Minus, ArrowRight, ShoppingBag, MapPin, ArrowLeft, Store, Bike, UtensilsCrossed } from 'lucide-react'
 import { MOCK_BRANCHES, MOCK_MENU_ITEMS } from '../mocks/orderMockData'
 import { useCart } from '../context/CartContext'
 
@@ -14,10 +14,16 @@ export function MenuPage() {
 
   if (!branch) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
-        <h2 className="text-2xl font-bold text-white mb-2">Branch Not Found</h2>
-        <p className="text-slate-400 mb-6">The branch you requested does not exist.</p>
-        <Link to="/" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold">
+      <div className="max-w-4xl mx-auto px-4 py-20 text-center">
+        <div className="w-16 h-16 rounded-full bg-red-50 text-[#E4002B] mx-auto flex items-center justify-center mb-4">
+          <UtensilsCrossed className="w-8 h-8" />
+        </div>
+        <h2 className="text-2xl font-black text-stone-900 mb-2">Branch Not Found</h2>
+        <p className="text-stone-500 mb-6">The branch you requested does not exist or has been relocated.</p>
+        <Link
+          to="/order"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#E4002B] hover:bg-[#C30024] text-white font-bold text-sm shadow-md transition"
+        >
           <ArrowLeft className="w-4 h-4" /> Back to Branches
         </Link>
       </div>
@@ -30,44 +36,59 @@ export function MenuPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-28">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-32">
       {/* Branch Header Banner */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white border border-stone-200 rounded-3xl p-6 sm:p-8 mb-8 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <Link to="/" className="text-slate-400 hover:text-amber-400 text-xs font-semibold flex items-center gap-1">
+              <Link
+                to="/order"
+                className="text-stone-500 hover:text-[#E4002B] text-xs font-bold flex items-center gap-1 transition"
+              >
                 <ArrowLeft className="w-3.5 h-3.5" /> All Branches
               </Link>
-              <span className="text-slate-600">•</span>
-              <span className="text-amber-400 text-xs font-semibold">Branch #{branch.id}</span>
+              <span className="text-stone-300">•</span>
+              <span className="text-[#E4002B] text-xs font-bold">Branch #{branch.id}</span>
             </div>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight">{branch.name}</h1>
-            <p className="text-slate-400 text-sm flex items-center gap-1.5 mt-1">
-              <MapPin className="w-4 h-4 text-slate-500" />
+            <h1 className="text-3xl sm:text-4xl font-black text-stone-900 tracking-tight">{branch.name}</h1>
+            <p className="text-stone-600 text-sm flex items-center gap-1.5 mt-2 font-medium">
+              <MapPin className="w-4 h-4 text-[#E4002B] shrink-0" />
               {branch.address}
             </p>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            {branch.takeaway && (
-              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                Takeaway Available
-              </span>
-            )}
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <Bike className="w-3.5 h-3.5" />
               Delivery Available
             </span>
+            {branch.takeaway ? (
+              <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-red-50 text-[#E4002B] border border-red-200">
+                <Store className="w-3.5 h-3.5" />
+                Takeaway Available
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-stone-100 text-stone-500 border border-stone-200">
+                Takeaway Not Supported
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Menu Section */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-white tracking-tight mb-2">Branch Menu</h2>
-        <p className="text-sm text-slate-400">Add freshly prepared items to your cart.</p>
+      {/* Menu Section Header */}
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-black text-stone-900 tracking-tight">Branch Menu</h2>
+          <p className="text-sm text-stone-500 mt-0.5">Explore freshly made items prepared at this branch.</p>
+        </div>
+        <span className="text-xs font-bold text-stone-400 bg-stone-100 px-3 py-1.5 rounded-lg">
+          {branchMenuItems.length} {branchMenuItems.length === 1 ? 'Item' : 'Items'} Available
+        </span>
       </div>
 
+      {/* Menu Items Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {branchMenuItems.map((item) => {
           const qty = getItemQuantityInCart(item.id)
@@ -75,38 +96,40 @@ export function MenuPage() {
           return (
             <div
               key={item.id}
-              className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between hover:border-slate-700 transition"
+              className="bg-white border border-stone-200 hover:border-red-200 rounded-2xl p-6 flex flex-col justify-between shadow-xs hover:shadow-md transition-all duration-200"
             >
               <div>
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide">
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-red-50 text-[#E4002B] border border-red-100 uppercase tracking-wide">
                     {item.category}
                   </span>
-                  <span className="text-lg font-black text-amber-400">
+                  <span className="text-lg font-black text-stone-900">
                     Rs. {item.price.toFixed(2)}
                   </span>
                 </div>
-                <h3 className="text-lg font-bold text-white mb-2">{item.name}</h3>
-                <p className="text-sm text-slate-400 mb-6">{item.description}</p>
+                <h3 className="text-lg font-bold text-stone-900 mb-2 leading-snug">{item.name}</h3>
+                <p className="text-sm text-stone-600 mb-6 line-clamp-3 leading-relaxed">{item.description}</p>
               </div>
 
-              <div>
+              <div className="pt-2 border-t border-stone-100">
                 {qty > 0 ? (
-                  <div className="flex items-center justify-between bg-slate-800/80 border border-slate-700 rounded-xl p-1.5">
+                  <div className="flex items-center justify-between bg-stone-50 border border-stone-200 rounded-xl p-1.5">
                     <button
                       type="button"
                       onClick={() => updateQuantity(item.id, -1)}
-                      className="w-8 h-8 rounded-lg bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center transition cursor-pointer"
+                      className="w-8 h-8 rounded-lg bg-white hover:bg-stone-100 text-stone-800 border border-stone-200 flex items-center justify-center transition cursor-pointer shadow-xs active:scale-95"
+                      title="Decrease quantity"
                     >
                       <Minus className="w-4 h-4" />
                     </button>
-                    <span className="text-sm font-bold text-white px-3">
+                    <span className="text-sm font-black text-stone-900 px-3">
                       {qty} in cart
                     </span>
                     <button
                       type="button"
                       onClick={() => updateQuantity(item.id, 1)}
-                      className="w-8 h-8 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center justify-center transition cursor-pointer font-bold"
+                      className="w-8 h-8 rounded-lg bg-[#E4002B] hover:bg-[#C30024] text-white flex items-center justify-center transition cursor-pointer shadow-xs active:scale-95"
+                      title="Increase quantity"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
@@ -120,10 +143,10 @@ export function MenuPage() {
                         numericBranchId
                       )
                     }
-                    className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-white text-sm font-bold flex items-center justify-center gap-2 border border-slate-700 hover:border-amber-400 transition cursor-pointer"
+                    className="w-full py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-[#E4002B] text-white text-sm font-bold flex items-center justify-center gap-2 transition duration-150 cursor-pointer shadow-xs"
                   >
                     <Plus className="w-4 h-4" />
-                    Add to Cart
+                    <span>Add to Cart</span>
                   </button>
                 )}
               </div>
@@ -134,17 +157,17 @@ export function MenuPage() {
 
       {/* Floating Bottom Cart Bar */}
       {totalCount > 0 && (
-        <div className="fixed bottom-4 left-4 right-4 max-w-2xl mx-auto z-40">
-          <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 rounded-2xl p-4 shadow-2xl shadow-amber-500/25 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-slate-950 text-amber-400 flex items-center justify-center font-bold">
+        <div className="fixed bottom-5 left-4 right-4 max-w-3xl mx-auto z-40 animate-in slide-in-from-bottom duration-200">
+          <div className="bg-[#E4002B] text-white rounded-2xl p-4 shadow-2xl shadow-red-600/30 flex items-center justify-between border border-red-500/40">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-white text-[#E4002B] flex items-center justify-center font-black shadow-sm">
                 <ShoppingBag className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-900/80">
+                <p className="text-xs font-bold uppercase tracking-wider text-red-100">
                   {totalCount} {totalCount === 1 ? 'item' : 'items'} in Cart
                 </p>
-                <p className="text-lg font-black leading-tight">
+                <p className="text-xl font-black leading-tight text-white">
                   Est. Rs. {grandTotal.toFixed(2)}
                 </p>
               </div>
@@ -152,9 +175,9 @@ export function MenuPage() {
 
             <Link
               to="/cart"
-              className="flex items-center gap-2 bg-slate-950 text-white hover:bg-slate-900 px-5 py-2.5 rounded-xl font-bold text-sm transition active:scale-95"
+              className="flex items-center gap-2 bg-white hover:bg-stone-100 text-[#E4002B] px-5 py-3 rounded-xl font-black text-sm transition shadow-sm active:scale-95 cursor-pointer"
             >
-              <span>View Cart</span>
+              <span>View Cart & Checkout</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
           </div>

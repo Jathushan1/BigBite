@@ -32,22 +32,27 @@ public class OrderService {
             OrderStatus.CONFIRMED
     );
 
+    public static final String SRI_LANKAN_PHONE_REGEX = "^(?:\\+94|0)[1-9][0-9]{8}$";
+
     private final OrderRepository orderRepository;
     private final BranchLookupService branchLookupService;
     private final MenuLookupService menuLookupService;
     private final PromotionValidationService promotionValidationService;
     private final InventoryCheckService inventoryCheckService;
+    private final SavedAddressRepository savedAddressRepository;
 
     public OrderService(OrderRepository orderRepository,
                         BranchLookupService branchLookupService,
                         MenuLookupService menuLookupService,
                         PromotionValidationService promotionValidationService,
-                        InventoryCheckService inventoryCheckService) {
+                        InventoryCheckService inventoryCheckService,
+                        SavedAddressRepository savedAddressRepository) {
         this.orderRepository = orderRepository;
         this.branchLookupService = branchLookupService;
         this.menuLookupService = menuLookupService;
         this.promotionValidationService = promotionValidationService;
         this.inventoryCheckService = inventoryCheckService;
+        this.savedAddressRepository = savedAddressRepository;
     }
 
     public OrderResponseDto placeOrder(OrderRequestDto request) {
@@ -78,12 +83,21 @@ public class OrderService {
             }
         }
 
+        String contactName = request.getEffectiveContactName();
+        String contactPhone = request.getEffectiveContactPhone();
+
         if (request.getCustomerId() == null) {
-            if (request.getGuestName() == null || request.getGuestName().trim().isEmpty()) {
+            if (contactName == null || contactName.trim().isEmpty()) {
                 throw new IllegalArgumentException("guestName is required for guest checkout");
             }
-            if (request.getGuestPhone() == null || request.getGuestPhone().trim().isEmpty()) {
+            if (contactPhone == null || contactPhone.trim().isEmpty()) {
                 throw new IllegalArgumentException("guestPhone is required for guest checkout");
+            }
+        }
+
+        if (contactPhone != null && !contactPhone.trim().isEmpty()) {
+            if (!contactPhone.trim().matches(SRI_LANKAN_PHONE_REGEX)) {
+                throw new IllegalArgumentException("Invalid Sri Lankan phone number format. Must be 07XXXXXXXX or +947XXXXXXXX");
             }
         }
 
@@ -93,8 +107,10 @@ public class OrderService {
 
         Order order = new Order();
         order.setCustomerId(request.getCustomerId());
-        order.setGuestName(request.getGuestName() != null ? request.getGuestName().trim() : null);
-        order.setGuestPhone(request.getGuestPhone() != null ? request.getGuestPhone().trim() : null);
+        order.setContactName(contactName);
+        order.setContactPhone(contactPhone);
+        order.setGuestName(contactName);
+        order.setGuestPhone(contactPhone);
         order.setGuestEmail(request.getGuestEmail() != null ? request.getGuestEmail().trim() : null);
         order.setBranchId(branchId);
         order.setFulfillmentType(request.getFulfillmentType());
@@ -171,6 +187,14 @@ public class OrderService {
         order.setGrandTotal(grandTotal.setScale(2, RoundingMode.HALF_UP));
 
         Order saved = orderRepository.save(order);
+
+        if (request.isSaveAddress() && request.getCustomerId() != null && request.getDeliveryAddress() != null && !request.getDeliveryAddress().trim().isEmpty()) {
+            String addr = request.getDeliveryAddress().trim();
+            if (savedAddressRepository != null && !savedAddressRepository.existsByCustomerIdAndAddressLine(request.getCustomerId(), addr)) {
+                savedAddressRepository.save(new SavedAddress(request.getCustomerId(), addr, request.getCity()));
+            }
+        }
+
         return toOrderResponseDto(saved);
     }
 
@@ -323,10 +347,25 @@ public class OrderService {
                 .orElseThrow(() -> new IllegalArgumentException("Order with id " + id + " not found"));
     }
 
+    @Transactional(readOnly = true)
+    public List<SavedAddress> getSavedAddresses(Long customerId) {
+        if (customerId == null || savedAddressRepository == null) return List.of();
+        return savedAddressRepository.findByCustomerIdOrderByCreatedAtDesc(customerId);
+    }
+
+    public SavedAddress saveAddress(Long customerId, String addressLine, String city) {
+        if (customerId == null || addressLine == null || addressLine.trim().isEmpty()) {
+            throw new IllegalArgumentException("Customer ID and address line are required");
+        }
+        return savedAddressRepository.save(new SavedAddress(customerId, addressLine.trim(), city));
+    }
+
     private OrderResponseDto toOrderResponseDto(Order order) {
         OrderResponseDto dto = new OrderResponseDto();
         dto.setId(order.getId());
         dto.setCustomerId(order.getCustomerId());
+        dto.setContactName(order.getContactName());
+        dto.setContactPhone(order.getContactPhone());
         dto.setGuestName(order.getGuestName());
         dto.setGuestPhone(order.getGuestPhone());
         dto.setGuestEmail(order.getGuestEmail());

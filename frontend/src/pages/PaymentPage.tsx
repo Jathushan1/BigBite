@@ -56,8 +56,8 @@ export function PaymentPage() {
   if (loading) {
     return (
       <div className="max-w-md mx-auto px-4 py-24 text-center">
-        <Loader2 className="w-8 h-8 animate-spin text-amber-400 mx-auto mb-3" />
-        <p className="text-slate-400 text-sm">Preparing payment checkout...</p>
+        <Loader2 className="w-8 h-8 animate-spin text-[#E4002B] mx-auto mb-3" />
+        <p className="text-stone-500 text-sm font-medium">Preparing payment checkout...</p>
       </div>
     )
   }
@@ -65,11 +65,14 @@ export function PaymentPage() {
   if (error && !order) {
     return (
       <div className="max-w-md mx-auto px-4 py-20 text-center">
-        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 mb-6">
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 mb-6">
           <p className="font-bold">Error loading order</p>
           <p className="text-sm mt-1">{error}</p>
         </div>
-        <Link to="/" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#E4002B] text-white font-bold text-sm shadow-md"
+        >
           <ArrowLeft className="w-4 h-4" /> Go to Home
         </Link>
       </div>
@@ -78,57 +81,57 @@ export function PaymentPage() {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-12">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
-        {/* Glow Header */}
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-600 text-slate-950 flex items-center justify-center mb-6 shadow-lg shadow-amber-500/20">
+      <div className="bg-white border border-stone-200 rounded-3xl p-8 shadow-xl relative overflow-hidden">
+        {/* Header Icon */}
+        <div className="w-14 h-14 rounded-2xl bg-red-50 text-[#E4002B] flex items-center justify-center mb-6 shadow-xs">
           <CreditCard className="w-7 h-7 stroke-[2.2]" />
         </div>
 
         <div className="mb-6">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-400">
-              Mock Payment Gateway
+            <span className="text-xs font-bold uppercase tracking-wider text-[#E4002B]">
+              Payment Verification
             </span>
-            <span className="text-xs font-medium text-slate-400">
+            <span className="text-xs font-semibold text-stone-500">
               Order #{order?.id}
             </span>
           </div>
-          <h1 className="text-2xl font-extrabold text-white tracking-tight mt-1">
+          <h1 className="text-2xl font-black text-stone-900 tracking-tight mt-1">
             Complete Your Payment
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Simulate payment gateway response to advance the order pipeline.
+          <p className="text-xs text-stone-500 mt-1">
+            Simulate gateway response to verify payment and advance the order pipeline.
           </p>
         </div>
 
         {/* Order Summary Box */}
-        <div className="bg-slate-800/60 border border-slate-700/80 rounded-2xl p-4 mb-6 space-y-2 text-sm">
-          <div className="flex justify-between text-slate-400">
+        <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 mb-6 space-y-2 text-sm">
+          <div className="flex justify-between text-stone-600">
             <span>Customer:</span>
-            <span className="text-white font-medium">
-              {order?.customerId ? `Customer #${order.customerId}` : order?.guestName}
+            <span className="text-stone-900 font-bold">
+              {order?.contactName || (order?.customerId ? `Customer #${order.customerId}` : order?.guestName)}
             </span>
           </div>
-          <div className="flex justify-between text-slate-400">
+          <div className="flex justify-between text-stone-600">
             <span>Fulfillment:</span>
-            <span className="text-white font-medium">{order?.fulfillmentType}</span>
+            <span className="text-stone-900 font-bold uppercase">{order?.fulfillmentType}</span>
           </div>
-          <div className="flex justify-between text-slate-400">
+          <div className="flex justify-between text-stone-600">
             <span>Current Status:</span>
-            <span className="text-amber-400 font-semibold">{order?.status}</span>
+            <span className="text-[#E4002B] font-bold">{order?.status}</span>
           </div>
-          <div className="border-t border-slate-700/80 pt-2 flex justify-between text-white font-black text-lg">
+          <div className="border-t border-stone-200 pt-2 flex justify-between text-stone-900 font-black text-lg">
             <span>Total Payable:</span>
-            <span className="text-amber-400">Rs. {order?.grandTotal?.toFixed(2)}</span>
+            <span className="text-[#E4002B]">Rs. {order?.grandTotal?.toFixed(2)}</span>
           </div>
         </div>
 
         {paymentFailedNotice && (
-          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs mb-6 flex items-start gap-2">
-            <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs mb-6 flex items-start gap-2.5">
+            <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
             <div>
-              <p className="font-bold text-rose-300">Payment Simulation: FAILED</p>
-              <p className="mt-0.5">The payment was declined. You can retry simulation below.</p>
+              <p className="font-bold">Payment Simulation: DECLINED</p>
+              <p className="mt-0.5 text-rose-600">The simulated transaction failed. You can retry below.</p>
             </div>
           </div>
         )}
@@ -139,7 +142,7 @@ export function PaymentPage() {
             type="button"
             disabled={submitting}
             onClick={() => handlePaymentSimulation(true)}
-            className="w-full py-3.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-500/20 active:scale-98 cursor-pointer disabled:opacity-50"
+            className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm flex items-center justify-center gap-2 transition shadow-md shadow-emerald-600/20 active:scale-98 cursor-pointer disabled:opacity-50"
           >
             {submitting ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -153,7 +156,7 @@ export function PaymentPage() {
             type="button"
             disabled={submitting}
             onClick={() => handlePaymentSimulation(false)}
-            className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-rose-500/20 hover:text-rose-300 text-slate-400 font-bold text-xs flex items-center justify-center gap-2 border border-slate-700 transition cursor-pointer disabled:opacity-50"
+            className="w-full py-3 px-4 rounded-xl bg-white hover:bg-rose-50 hover:text-rose-700 text-stone-600 font-bold text-xs flex items-center justify-center gap-2 border border-stone-300 transition cursor-pointer disabled:opacity-50"
           >
             <XCircle className="w-4 h-4" />
             <span>Simulate Payment Failure</span>
@@ -163,7 +166,7 @@ export function PaymentPage() {
         <div className="mt-6 text-center">
           <Link
             to={`/order/${numericOrderId}`}
-            className="text-xs text-slate-500 hover:text-slate-400 underline"
+            className="text-xs text-stone-500 hover:text-[#E4002B] font-semibold underline transition"
           >
             Skip to Order Status Tracking
           </Link>

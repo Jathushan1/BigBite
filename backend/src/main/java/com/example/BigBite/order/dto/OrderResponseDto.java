@@ -12,6 +12,8 @@ public class OrderResponseDto {
 
     private Long id;
     private Long customerId;
+    private String contactName;
+    private String contactPhone;
     private String guestName;
     private String guestPhone;
     private String guestEmail;
@@ -47,6 +49,22 @@ public class OrderResponseDto {
 
     public void setCustomerId(Long customerId) {
         this.customerId = customerId;
+    }
+
+    public String getContactName() {
+        return contactName != null ? contactName : guestName;
+    }
+
+    public void setContactName(String contactName) {
+        this.contactName = contactName;
+    }
+
+    public String getContactPhone() {
+        return contactPhone != null ? contactPhone : guestPhone;
+    }
+
+    public void setContactPhone(String contactPhone) {
+        this.contactPhone = contactPhone;
     }
 
     public String getGuestName() {

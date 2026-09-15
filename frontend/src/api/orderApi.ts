@@ -3,6 +3,7 @@ import type {
   OrderResponse,
   BillResponse,
   OrderStatus,
+  SavedAddress,
 } from '../types/order'
 
 async function handleResponse<T>(res: Response): Promise<T> {
@@ -83,4 +84,25 @@ export async function updateOrderStatus(id: number, status: OrderStatus): Promis
     body: JSON.stringify({ status }),
   })
   return handleResponse<OrderResponse>(res)
+}
+
+export async function getSavedAddresses(customerId: number): Promise<SavedAddress[]> {
+  const res = await fetch(`/api/orders/addresses?customerId=${customerId}`)
+  return handleResponse<SavedAddress[]>(res)
+}
+
+export async function saveCustomerAddress(
+  customerId: number,
+  addressLine: string,
+  city?: string
+): Promise<SavedAddress> {
+  const params = new URLSearchParams()
+  params.append('customerId', String(customerId))
+  params.append('addressLine', addressLine)
+  if (city) params.append('city', city)
+
+  const res = await fetch(`/api/orders/addresses?${params.toString()}`, {
+    method: 'POST',
+  })
+  return handleResponse<SavedAddress>(res)
 }

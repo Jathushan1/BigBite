@@ -30,11 +30,11 @@ export function StatusStepper({ currentStatus, fulfillmentType }: StatusStepperP
 
   if (currentStatus === 'CANCELLED') {
     return (
-      <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-3 text-rose-400">
-        <XCircle className="w-6 h-6 flex-shrink-0" />
+      <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-3 text-rose-700">
+        <XCircle className="w-6 h-6 shrink-0 text-rose-600" />
         <div>
-          <h4 className="font-semibold text-rose-300">Order Cancelled</h4>
-          <p className="text-sm text-rose-400/80">This order has been cancelled and is no longer being processed.</p>
+          <h4 className="font-bold text-rose-800">Order Cancelled</h4>
+          <p className="text-xs text-rose-600">This order has been cancelled and is no longer being processed.</p>
         </div>
       </div>
     )
@@ -44,7 +44,7 @@ export function StatusStepper({ currentStatus, fulfillmentType }: StatusStepperP
   const isPreparingOrLater = ['PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(currentStatus)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="relative flex items-center justify-between">
         {steps.map((step, idx) => {
           const isPassed = idx < currentIndex
@@ -56,7 +56,7 @@ export function StatusStepper({ currentStatus, fulfillmentType }: StatusStepperP
               {idx < steps.length - 1 && (
                 <div
                   className={`absolute top-4 left-1/2 w-full h-1 -translate-y-1/2 transition-colors duration-300 ${
-                    idx < currentIndex ? 'bg-amber-500' : 'bg-slate-700'
+                    idx < currentIndex ? 'bg-[#E4002B]' : 'bg-stone-200'
                   }`}
                   style={{ zIndex: 0 }}
                 />
@@ -66,29 +66,29 @@ export function StatusStepper({ currentStatus, fulfillmentType }: StatusStepperP
               <div
                 className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
                   isPassed
-                    ? 'bg-amber-500 text-slate-950 ring-4 ring-slate-900'
+                    ? 'bg-[#E4002B] text-white ring-4 ring-white shadow-xs'
                     : isCurrent
-                    ? 'bg-amber-400 text-slate-950 ring-4 ring-amber-400/30 animate-pulse'
-                    : 'bg-slate-800 text-slate-500 border border-slate-700'
+                    ? 'bg-[#E4002B] text-white ring-4 ring-red-100 shadow-sm animate-pulse'
+                    : 'bg-stone-100 text-stone-400 border border-stone-200'
                 }`}
               >
                 {isPassed ? (
                   <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
                 ) : isCurrent ? (
-                  <div className="w-2.5 h-2.5 rounded-full bg-slate-950" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-white" />
                 ) : (
-                  <Circle className="w-4 h-4 text-slate-600" />
+                  <Circle className="w-4 h-4 text-stone-400" />
                 )}
               </div>
 
               {/* Step label */}
               <span
-                className={`mt-2 text-xs text-center font-medium transition-colors ${
+                className={`mt-2 text-xs text-center font-bold transition-colors ${
                   isCurrent
-                    ? 'text-amber-400 font-bold'
+                    ? 'text-[#E4002B]'
                     : isPassed
-                    ? 'text-slate-300'
-                    : 'text-slate-500'
+                    ? 'text-stone-900'
+                    : 'text-stone-400'
                 }`}
               >
                 {step.label}
@@ -99,8 +99,8 @@ export function StatusStepper({ currentStatus, fulfillmentType }: StatusStepperP
       </div>
 
       {isPreparingOrLater && (
-        <div className="p-3 rounded-lg bg-slate-800/60 border border-slate-700/80 flex items-center gap-2 text-xs text-slate-400">
-          <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+        <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-center gap-2 text-xs text-amber-800">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
           <span>Preparation has started. Order cancellation is now locked.</span>
         </div>
       )}

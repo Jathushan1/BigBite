@@ -46,6 +46,9 @@ class OrderServiceTest {
     @Mock
     private InventoryCheckService inventoryCheckService;
 
+    @Mock
+    private SavedAddressRepository savedAddressRepository;
+
     @InjectMocks
     private OrderService orderService;
 
@@ -327,5 +330,87 @@ class OrderServiceTest {
         OrderResponseDto failResponse = orderService.recordPayment(16L, false);
         assertEquals(PaymentStatus.FAILED, failResponse.getPaymentStatus());
         assertEquals(OrderStatus.PLACED, failResponse.getStatus());
+    }
+
+    @Test
+    @DisplayName("Sri Lankan phone validation rejects invalid format and accepts valid local and international formats")
+    void testSriLankanPhoneValidation() {
+        when(branchLookupService.branchExists(1L)).thenReturn(true);
+        when(branchLookupService.isBranchOpen(1L)).thenReturn(true);
+        when(branchLookupService.supportsTakeaway(1L)).thenReturn(true);
+
+        // Invalid format 1: too short
+        OrderRequestDto req1 = new OrderRequestDto();
+        req1.setBranchId(1L);
+        req1.setFulfillmentType(FulfillmentType.TAKEAWAY);
+        req1.setContactName("Kasun Perera");
+        req1.setContactPhone("077123");
+        req1.setItems(List.of(new OrderItemRequestDto(101L, 1)));
+
+        IllegalArgumentException ex1 = assertThrows(IllegalArgumentException.class, () -> orderService.placeOrder(req1));
+        assertTrue(ex1.getMessage().contains("Invalid Sri Lankan phone number format"));
+
+        // Invalid format 2: double leading zero after country code +94077...
+        OrderRequestDto req2 = new OrderRequestDto();
+        req2.setBranchId(1L);
+        req2.setFulfillmentType(FulfillmentType.TAKEAWAY);
+        req2.setContactName("Kasun Perera");
+        req2.setContactPhone("+940771234567");
+        req2.setItems(List.of(new OrderItemRequestDto(101L, 1)));
+
+        IllegalArgumentException ex2 = assertThrows(IllegalArgumentException.class, () -> orderService.placeOrder(req2));
+        assertTrue(ex2.getMessage().contains("Invalid Sri Lankan phone number format"));
+
+        // Valid format 1: 0771234567
+        OrderRequestDto req3 = new OrderRequestDto();
+        req3.setBranchId(1L);
+        req3.setFulfillmentType(FulfillmentType.TAKEAWAY);
+        req3.setContactName("Kasun Perera");
+        req3.setContactPhone("0771234567");
+        req3.setItems(List.of(new OrderItemRequestDto(101L, 1)));
+
+        when(menuLookupService.getItem(101L))
+                .thenReturn(new MenuLookupService.MenuItemInfo(101L, "Margherita Pizza", new BigDecimal("1200"), 1L));
+        when(menuLookupService.isAvailable(101L)).thenReturn(true);
+        when(inventoryCheckService.isInStock(101L, 1)).thenReturn(true);
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrderResponseDto res3 = orderService.placeOrder(req3);
+        assertNotNull(res3);
+        assertEquals("0771234567", res3.getContactPhone());
+
+        // Valid format 2: +94771234567
+        req3.setContactPhone("+94771234567");
+        OrderResponseDto res4 = orderService.placeOrder(req3);
+        assertNotNull(res4);
+        assertEquals("+94771234567", res4.getContactPhone());
+    }
+
+    @Test
+    @DisplayName("Address is persisted to SavedAddress when saveAddress is true")
+    void testSaveAddressOnOrderPlacement() {
+        OrderRequestDto request = new OrderRequestDto();
+        request.setCustomerId(99L);
+        request.setBranchId(1L);
+        request.setFulfillmentType(FulfillmentType.DELIVERY);
+        request.setDeliveryAddress("123 Duplication Road, Colombo 04");
+        request.setCity("Colombo");
+        request.setSaveAddress(true);
+        request.setContactName("Nimal Silva");
+        request.setContactPhone("0712345678");
+        request.setItems(List.of(new OrderItemRequestDto(101L, 1)));
+
+        when(branchLookupService.branchExists(1L)).thenReturn(true);
+        when(branchLookupService.isBranchOpen(1L)).thenReturn(true);
+        when(menuLookupService.getItem(101L))
+                .thenReturn(new MenuLookupService.MenuItemInfo(101L, "Margherita Pizza", new BigDecimal("1200"), 1L));
+        when(menuLookupService.isAvailable(101L)).thenReturn(true);
+        when(inventoryCheckService.isInStock(101L, 1)).thenReturn(true);
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(savedAddressRepository.existsByCustomerIdAndAddressLine(99L, "123 Duplication Road, Colombo 04")).thenReturn(false);
+
+        orderService.placeOrder(request);
+
+        verify(savedAddressRepository, times(1)).save(any(SavedAddress.class));
     }
 }

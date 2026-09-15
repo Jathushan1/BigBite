@@ -20,12 +20,16 @@ export interface OrderItemRequest {
 
 export interface OrderRequest {
   customerId?: number | null
+  contactName?: string | null
+  contactPhone?: string | null
   guestName?: string | null
   guestPhone?: string | null
   guestEmail?: string | null
   branchId: number
   fulfillmentType: FulfillmentType
   deliveryAddress?: string | null
+  city?: string | null
+  saveAddress?: boolean
   promoCode?: string | null
   items: OrderItemRequest[]
 }
@@ -42,6 +46,8 @@ export interface OrderItemResponse {
 export interface OrderResponse {
   id: number
   customerId?: number | null
+  contactName?: string | null
+  contactPhone?: string | null
   guestName?: string | null
   guestPhone?: string | null
   guestEmail?: string | null
@@ -87,4 +93,12 @@ export interface BillResponse {
   paymentStatus: PaymentStatus
   orderStatus: OrderStatus
   createdAt: string
+}
+
+export interface SavedAddress {
+  id: number
+  customerId: number
+  addressLine: string
+  city?: string
+  createdAt?: string
 }

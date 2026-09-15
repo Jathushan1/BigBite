@@ -29,6 +29,12 @@ public class Order {
     @Column(name = "customer_id", nullable = true)
     private Long customerId;
 
+    @Column(name = "contact_name", nullable = true)
+    private String contactName;
+
+    @Column(name = "contact_phone", nullable = true)
+    private String contactPhone;
+
     @Column(name = "guest_name", nullable = true)
     private String guestName;
 
@@ -129,6 +135,28 @@ public class Order {
 
     public void setCustomerId(Long customerId) {
         this.customerId = customerId;
+    }
+
+    public String getContactName() {
+        return contactName != null ? contactName : guestName;
+    }
+
+    public void setContactName(String contactName) {
+        this.contactName = contactName;
+        if (this.guestName == null) {
+            this.guestName = contactName;
+        }
+    }
+
+    public String getContactPhone() {
+        return contactPhone != null ? contactPhone : guestPhone;
+    }
+
+    public void setContactPhone(String contactPhone) {
+        this.contactPhone = contactPhone;
+        if (this.guestPhone == null) {
+            this.guestPhone = contactPhone;
+        }
     }
 
     public String getGuestName() {

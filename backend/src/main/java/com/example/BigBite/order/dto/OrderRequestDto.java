@@ -10,6 +10,8 @@ import java.util.List;
 public class OrderRequestDto {
 
     private Long customerId;
+    private String contactName;
+    private String contactPhone;
     private String guestName;
     private String guestPhone;
     private String guestEmail;
@@ -21,6 +23,8 @@ public class OrderRequestDto {
     private FulfillmentType fulfillmentType;
 
     private String deliveryAddress;
+    private String city;
+    private boolean saveAddress;
     private String promoCode;
 
     @NotEmpty(message = "Order must contain at least one item")
@@ -30,12 +34,42 @@ public class OrderRequestDto {
     public OrderRequestDto() {
     }
 
+    public String getEffectiveContactName() {
+        if (contactName != null && !contactName.trim().isEmpty()) {
+            return contactName.trim();
+        }
+        return guestName != null && !guestName.trim().isEmpty() ? guestName.trim() : null;
+    }
+
+    public String getEffectiveContactPhone() {
+        if (contactPhone != null && !contactPhone.trim().isEmpty()) {
+            return contactPhone.trim();
+        }
+        return guestPhone != null && !guestPhone.trim().isEmpty() ? guestPhone.trim() : null;
+    }
+
     public Long getCustomerId() {
         return customerId;
     }
 
     public void setCustomerId(Long customerId) {
         this.customerId = customerId;
+    }
+
+    public String getContactName() {
+        return contactName;
+    }
+
+    public void setContactName(String contactName) {
+        this.contactName = contactName;
+    }
+
+    public String getContactPhone() {
+        return contactPhone;
+    }
+
+    public void setContactPhone(String contactPhone) {
+        this.contactPhone = contactPhone;
     }
 
     public String getGuestName() {
@@ -84,6 +118,22 @@ public class OrderRequestDto {
 
     public void setDeliveryAddress(String deliveryAddress) {
         this.deliveryAddress = deliveryAddress;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
+    }
+
+    public boolean isSaveAddress() {
+        return saveAddress;
+    }
+
+    public void setSaveAddress(boolean saveAddress) {
+        this.saveAddress = saveAddress;
     }
 
     public String getPromoCode() {
