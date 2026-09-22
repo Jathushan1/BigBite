@@ -15,8 +15,10 @@ import {
 import { getOrders, updateOrderStatus } from '../api/orderApi'
 import type { OrderResponse, OrderStatus } from '../types/order'
 import { MOCK_BRANCHES } from '../mocks/orderMockData'
+import { useAuth } from '../context/AuthContext'
 
 export function StaffOrderListPage() {
+  const { user } = useAuth()
   const [selectedBranch, setSelectedBranch] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
   const [orders, setOrders] = useState<OrderResponse[]>([])
@@ -70,7 +72,18 @@ export function StaffOrderListPage() {
       setMessage(`Order #${orderId} successfully advanced to ${nextStatus}`)
       await loadOrders()
     } catch (err: any) {
-      setError(err.message || `Failed to advance order #${orderId}`)
+      const errMsg = err.message || `Failed to advance order #${orderId}`
+      if (
+        errMsg.toLowerCase().includes('conflict') ||
+        errMsg.toLowerCase().includes('updated by another') ||
+        errMsg.toLowerCase().includes('status 409') ||
+        errMsg.toLowerCase().includes('just updated')
+      ) {
+        setError(`Conflict detected: Order #${orderId} was updated elsewhere. List has been refreshed.`)
+        await loadOrders()
+      } else {
+        setError(errMsg)
+      }
     } finally {
       setUpdatingId(null)
     }
@@ -109,6 +122,24 @@ export function StaffOrderListPage() {
       default:
         return null
     }
+  }
+
+  const canAdvanceStatus = (order: OrderResponse, nextStatus: OrderStatus): boolean => {
+    if (!user) return true // unauthenticated preview mode allows testing all transitions
+    if (user.role === 'SUPER_ADMIN') return true
+    if (user.role === 'CUSTOMER') return false
+
+    if (user.role === 'BRANCH_MANAGER') {
+      if (user.branchId && user.branchId !== order.branchId) return false
+      if (nextStatus === 'DELIVERED' && order.fulfillmentType === 'DELIVERY') return false
+      return true
+    }
+
+    if (user.role === 'DELIVERY_PARTNER') {
+      return nextStatus === 'DELIVERED' || nextStatus === 'COMPLETED'
+    }
+
+    return false
   }
 
   const getStatusPill = (status: string) => {
@@ -291,7 +322,7 @@ export function StaffOrderListPage() {
                     </span>
                   </div>
 
-                  {nextAction && (
+                  {nextAction && canAdvanceStatus(order, nextAction.nextStatus) ? (
                     <button
                       type="button"
                       disabled={isUpdating}
@@ -302,9 +333,13 @@ export function StaffOrderListPage() {
                       <span>{nextAction.label}</span>
                       <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
                     </button>
-                  )}
+                  ) : nextAction && !canAdvanceStatus(order, nextAction.nextStatus) ? (
+                    <span className="text-[11px] px-2.5 py-1 rounded-lg bg-neutral-100 text-neutral-500 font-bold border border-neutral-200">
+                      {user?.role === 'DELIVERY_PARTNER' ? 'Kitchen Action' : 'Role Restricted'}
+                    </span>
+                  ) : null}
 
-                  {secondaryAction && (
+                  {secondaryAction && canAdvanceStatus(order, secondaryAction.nextStatus) && (
                     <button
                       type="button"
                       disabled={isUpdating}

@@ -12,6 +12,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -25,6 +26,10 @@ public class Order {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
 
     @Column(name = "customer_id", nullable = true)
     private Long customerId;
@@ -46,6 +51,12 @@ public class Order {
 
     @Column(name = "branch_id", nullable = false)
     private Long branchId;
+
+    @Column(name = "branch_name_snapshot", nullable = true)
+    private String branchNameSnapshot;
+
+    @Column(name = "branch_address_snapshot", nullable = true)
+    private String branchAddressSnapshot;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "fulfillment_type", nullable = false)
@@ -81,11 +92,21 @@ public class Order {
     private PaymentStatus paymentStatus = PaymentStatus.PENDING;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "refund_status", nullable = false)
+    private RefundStatus refundStatus = RefundStatus.NOT_APPLICABLE;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "payment_method", nullable = true)
     private PaymentMethod paymentMethod;
 
     @Column(name = "stripe_payment_intent_id", nullable = true)
     private String stripePaymentIntentId;
+
+    @Column(name = "cancellation_reason", nullable = true)
+    private String cancellationReason;
+
+    @Column(name = "idempotency_key", nullable = true, unique = true, length = 100)
+    private String idempotencyKey;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -317,4 +338,54 @@ public class Order {
     public void setItems(List<OrderItem> items) {
         this.items = items;
     }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
+    }
+
+    public String getBranchNameSnapshot() {
+        return branchNameSnapshot;
+    }
+
+    public void setBranchNameSnapshot(String branchNameSnapshot) {
+        this.branchNameSnapshot = branchNameSnapshot;
+    }
+
+    public String getBranchAddressSnapshot() {
+        return branchAddressSnapshot;
+    }
+
+    public void setBranchAddressSnapshot(String branchAddressSnapshot) {
+        this.branchAddressSnapshot = branchAddressSnapshot;
+    }
+
+    public RefundStatus getRefundStatus() {
+        return refundStatus;
+    }
+
+    public void setRefundStatus(RefundStatus refundStatus) {
+        this.refundStatus = refundStatus;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
+    }
+
+    public String getCancellationReason() {
+        return cancellationReason;
+    }
+
+    public void setCancellationReason(String cancellationReason) {
+        this.cancellationReason = cancellationReason;
+    }
 }
+
+

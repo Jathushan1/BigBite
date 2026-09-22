@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Clock, ArrowRight, Loader2, RefreshCw, ShoppingBag, Store } from 'lucide-react'
-import { getOrderHistory } from '../api/orderApi'
+import { Clock, ArrowRight, Loader2, RefreshCw, ShoppingBag, Store, Link2 } from 'lucide-react'
+import { getOrderHistory, claimGuestOrders } from '../api/orderApi'
 import { useAuth } from '../context/AuthContext'
 import type { OrderResponse } from '../types/order'
 
@@ -11,12 +11,30 @@ export function OrderHistoryPage() {
   const [orders, setOrders] = useState<OrderResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [claiming, setClaiming] = useState(false)
+  const [claimFeedback, setClaimFeedback] = useState<string | null>(null)
 
   useEffect(() => {
     if (user?.id) {
       setCustomerId(user.id)
     }
   }, [user?.id])
+
+  const handleClaimOrders = async () => {
+    try {
+      setClaiming(true)
+      setClaimFeedback(null)
+      const res = await claimGuestOrders()
+      setClaimFeedback(res.message)
+      if (res.claimedCount > 0) {
+        await loadHistory()
+      }
+    } catch (err: any) {
+      setClaimFeedback(err.message || 'Failed to claim guest orders')
+    } finally {
+      setClaiming(false)
+    }
+  }
 
   const loadHistory = async () => {
     try {
@@ -81,6 +99,17 @@ export function OrderHistoryPage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
+            onClick={handleClaimOrders}
+            disabled={claiming}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-stone-50 text-stone-700 text-xs font-bold border border-stone-300 shadow-xs transition cursor-pointer disabled:opacity-50"
+            title="Link past guest orders made with your email or phone to this account"
+          >
+            <Link2 className={`w-3.5 h-3.5 ${claiming ? 'animate-spin' : ''}`} />
+            <span>{claiming ? 'Linking...' : 'Link Guest Orders'}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={loadHistory}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-stone-50 text-stone-700 text-xs font-bold border border-stone-300 shadow-xs transition cursor-pointer"
           >
@@ -89,6 +118,19 @@ export function OrderHistoryPage() {
           </button>
         </div>
       </div>
+
+      {claimFeedback && (
+        <div className="mb-6 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center justify-between">
+          <span>{claimFeedback}</span>
+          <button
+            type="button"
+            onClick={() => setClaimFeedback(null)}
+            className="text-amber-700 hover:text-amber-900 underline text-xs ml-4 cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="py-24 text-center">
@@ -140,7 +182,7 @@ export function OrderHistoryPage() {
 
                 <p className="text-xs text-stone-500">
                   <Store className="w-3 h-3 inline mr-1 text-stone-400" />
-                  Branch #{order.branchId} • {order.items.length} item(s) •{' '}
+                  {order.branchNameSnapshot || `Branch #${order.branchId}`} • {order.items.length} item(s) •{' '}
                   {order.createdAt ? new Date(order.createdAt).toLocaleString() : ''}
                 </p>
               </div>

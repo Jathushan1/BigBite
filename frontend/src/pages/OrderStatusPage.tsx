@@ -188,6 +188,27 @@ export function OrderStatusPage() {
         </div>
       )}
 
+      {order?.status === 'CANCELLED' && order.cancellationReason === 'TIMEOUT' && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-xs text-rose-700 font-semibold">
+          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+          <span>This order was automatically cancelled because payment was not completed within the checkout timeout window.</span>
+        </div>
+      )}
+
+      {order?.refundStatus === 'PENDING' && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-between gap-3 text-xs text-amber-800">
+          <div className="flex items-center gap-2 font-medium">
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+            <span>
+              <strong>Refund Pending:</strong> A refund of Rs. {order.grandTotal.toFixed(2)} is pending for this cancelled order and will be credited to your account.
+            </span>
+          </div>
+          <span className="px-2.5 py-1 rounded-lg bg-amber-100 font-bold uppercase tracking-wider text-[10px] text-amber-900 border border-amber-300 shrink-0">
+            Pending Refund
+          </span>
+        </div>
+      )}
+
       {/* Pipeline Status Stepper Card */}
       <div className="bg-white border border-stone-200 rounded-3xl p-6 sm:p-8 shadow-xs">
         <h2 className="text-base font-black text-stone-900 mb-6">Live Status Tracker</h2>
@@ -296,8 +317,13 @@ export function OrderStatusPage() {
                 <span className="text-stone-400 uppercase font-bold text-[10px] block">Order Branch</span>
                 <span className="text-stone-900 font-semibold flex items-center gap-1.5 mt-0.5">
                   <Store className="w-3.5 h-3.5 text-stone-500" />
-                  Branch #{order?.branchId}
+                  {order?.branchNameSnapshot || `Branch #${order?.branchId}`}
                 </span>
+                {order?.branchAddressSnapshot && (
+                  <span className="text-stone-500 text-xs block pl-5 mt-0.5">
+                    {order.branchAddressSnapshot}
+                  </span>
+                )}
               </div>
             </div>
 

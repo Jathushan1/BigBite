@@ -4,6 +4,7 @@ import type {
   BillResponse,
   OrderStatus,
   SavedAddress,
+  ClaimOrdersResponse,
   PaymentRequest,
   PaymentIntentResponse,
 } from '../types/order'
@@ -62,6 +63,15 @@ export async function cancelOrder(id: number): Promise<OrderResponse> {
   const res = await fetch(`/api/orders/${id}/cancel`, {
     method: 'POST',
     headers: getHeaders(),
+  })
+  return handleResponse<OrderResponse>(res)
+}
+
+export async function updateOrderItem(orderId: number, itemId: number, quantity: number): Promise<OrderResponse> {
+  const res = await fetch(`/api/orders/${orderId}/items/${itemId}`, {
+    method: 'PATCH',
+    headers: getHeaders(),
+    body: JSON.stringify({ quantity }),
   })
   return handleResponse<OrderResponse>(res)
 }
@@ -144,4 +154,12 @@ export async function saveCustomerAddress(
     headers: getHeaders(),
   })
   return handleResponse<SavedAddress>(res)
+}
+
+export async function claimGuestOrders(): Promise<ClaimOrdersResponse> {
+  const res = await fetch('/api/orders/claim', {
+    method: 'POST',
+    headers: getHeaders(),
+  })
+  return handleResponse<ClaimOrdersResponse>(res)
 }

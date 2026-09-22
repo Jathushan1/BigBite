@@ -13,6 +13,8 @@ export type FulfillmentType = 'DELIVERY' | 'TAKEAWAY'
 
 export type PaymentStatus = 'PENDING' | 'VERIFIED' | 'FAILED'
 
+export type RefundStatus = 'NOT_APPLICABLE' | 'PENDING' | 'PROCESSED'
+
 export type PaymentMethod = 'CASH_ON_DELIVERY' | 'CARD_STRIPE'
 
 export interface PaymentRequest {
@@ -47,6 +49,7 @@ export interface OrderRequest {
   city?: string | null
   saveAddress?: boolean
   promoCode?: string | null
+  idempotencyKey?: string | null
   items: OrderItemRequest[]
 }
 
@@ -68,6 +71,8 @@ export interface OrderResponse {
   guestPhone?: string | null
   guestEmail?: string | null
   branchId: number
+  branchNameSnapshot?: string | null
+  branchAddressSnapshot?: string | null
   fulfillmentType: FulfillmentType
   deliveryAddress?: string | null
   status: OrderStatus
@@ -78,7 +83,11 @@ export interface OrderResponse {
   grandTotal: number
   promoCode?: string | null
   paymentStatus: PaymentStatus
+  refundStatus?: RefundStatus
   paymentMethod?: PaymentMethod
+  idempotencyKey?: string | null
+  version?: number | null
+  cancellationReason?: string | null
   createdAt: string
   updatedAt: string
   items: OrderItemResponse[]
@@ -118,4 +127,10 @@ export interface SavedAddress {
   addressLine: string
   city?: string
   createdAt?: string
+}
+
+export interface ClaimOrdersResponse {
+  claimedCount: number
+  claimedOrderIds: number[]
+  message: string
 }

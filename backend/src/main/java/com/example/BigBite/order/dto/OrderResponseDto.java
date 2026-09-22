@@ -4,6 +4,7 @@ import com.example.BigBite.order.FulfillmentType;
 import com.example.BigBite.order.OrderStatus;
 import com.example.BigBite.order.PaymentMethod;
 import com.example.BigBite.order.PaymentStatus;
+import com.example.BigBite.order.RefundStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -19,6 +20,8 @@ public class OrderResponseDto {
     private String guestPhone;
     private String guestEmail;
     private Long branchId;
+    private String branchNameSnapshot;
+    private String branchAddressSnapshot;
     private FulfillmentType fulfillmentType;
     private String deliveryAddress;
     private OrderStatus status;
@@ -29,7 +32,11 @@ public class OrderResponseDto {
     private BigDecimal grandTotal;
     private String promoCode;
     private PaymentStatus paymentStatus;
+    private RefundStatus refundStatus;
     private PaymentMethod paymentMethod;
+    private String idempotencyKey;
+    private Long version;
+    private String cancellationReason;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<OrderItemResponseDto> items;
@@ -212,4 +219,54 @@ public class OrderResponseDto {
     public void setItems(List<OrderItemResponseDto> items) {
         this.items = items;
     }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
+    }
+
+    public String getBranchNameSnapshot() {
+        return branchNameSnapshot;
+    }
+
+    public void setBranchNameSnapshot(String branchNameSnapshot) {
+        this.branchNameSnapshot = branchNameSnapshot;
+    }
+
+    public String getBranchAddressSnapshot() {
+        return branchAddressSnapshot;
+    }
+
+    public void setBranchAddressSnapshot(String branchAddressSnapshot) {
+        this.branchAddressSnapshot = branchAddressSnapshot;
+    }
+
+    public RefundStatus getRefundStatus() {
+        return refundStatus;
+    }
+
+    public void setRefundStatus(RefundStatus refundStatus) {
+        this.refundStatus = refundStatus;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
+    }
+
+    public String getCancellationReason() {
+        return cancellationReason;
+    }
+
+    public void setCancellationReason(String cancellationReason) {
+        this.cancellationReason = cancellationReason;
+    }
 }
+
+

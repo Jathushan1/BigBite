@@ -2,6 +2,7 @@ package com.example.BigBite.order;
 
 import com.example.BigBite.order.dto.BillDto;
 import com.example.BigBite.order.dto.BillItemDto;
+import com.example.BigBite.order.dto.ClaimOrdersResponseDto;
 import com.example.BigBite.order.dto.OrderItemRequestDto;
 import com.example.BigBite.order.dto.OrderItemResponseDto;
 import com.example.BigBite.order.dto.OrderRequestDto;
@@ -11,13 +12,17 @@ import com.example.BigBite.order.external.BranchLookupService;
 import com.example.BigBite.order.external.InventoryCheckService;
 import com.example.BigBite.order.external.MenuLookupService;
 import com.example.BigBite.order.external.PromotionValidationService;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -27,6 +32,9 @@ public class OrderService {
     private static final BigDecimal TAX_RATE = new BigDecimal("0.05");
     private static final BigDecimal TAX_PERCENT = new BigDecimal("5.00");
     private static final BigDecimal FLAT_DELIVERY_FEE = new BigDecimal("300.00");
+    public static final BigDecimal MINIMUM_ORDER_SUBTOTAL = new BigDecimal("500.00");
+    public static final int MAX_DISTINCT_ITEMS = 20;
+    public static final int MAX_ITEM_QUANTITY = 50;
     private static final Set<OrderStatus> CANCELLABLE_STATUSES = Set.of(
             OrderStatus.PLACED,
             OrderStatus.PAYMENT_VERIFIED,
@@ -59,6 +67,13 @@ public class OrderService {
     public OrderResponseDto placeOrder(OrderRequestDto request) {
         if (request == null) {
             throw new IllegalArgumentException("Order request must not be null");
+        }
+
+        if (request.getIdempotencyKey() != null && !request.getIdempotencyKey().trim().isEmpty()) {
+            Optional<Order> existingOrder = orderRepository.findByIdempotencyKey(request.getIdempotencyKey().trim());
+            if (existingOrder.isPresent()) {
+                return toOrderResponseDto(existingOrder.get());
+            }
         }
 
         Long branchId = request.getBranchId();
@@ -106,6 +121,10 @@ public class OrderService {
             throw new IllegalArgumentException("Order must contain at least one item");
         }
 
+        if (request.getItems().size() > MAX_DISTINCT_ITEMS) {
+            throw new IllegalArgumentException("Order cannot contain more than " + MAX_DISTINCT_ITEMS + " distinct items");
+        }
+
         Order order = new Order();
         order.setCustomerId(request.getCustomerId());
         order.setContactName(contactName);
@@ -114,8 +133,13 @@ public class OrderService {
         order.setGuestPhone(contactPhone);
         order.setGuestEmail(request.getGuestEmail() != null ? request.getGuestEmail().trim() : null);
         order.setBranchId(branchId);
+        order.setBranchNameSnapshot(branchLookupService.getBranchName(branchId));
+        order.setBranchAddressSnapshot(branchLookupService.getBranchAddress(branchId));
         order.setFulfillmentType(request.getFulfillmentType());
         order.setDeliveryAddress(request.getDeliveryAddress() != null ? request.getDeliveryAddress().trim() : null);
+        if (request.getIdempotencyKey() != null && !request.getIdempotencyKey().trim().isEmpty()) {
+            order.setIdempotencyKey(request.getIdempotencyKey().trim());
+        }
         order.setStatus(OrderStatus.PLACED);
         order.setPaymentStatus(PaymentStatus.PENDING);
 
@@ -127,6 +151,9 @@ public class OrderService {
             }
             if (itemReq.getQuantity() == null || itemReq.getQuantity() <= 0) {
                 throw new IllegalArgumentException("Item quantity must be greater than zero");
+            }
+            if (itemReq.getQuantity() > MAX_ITEM_QUANTITY) {
+                throw new IllegalArgumentException("Quantity for item " + itemReq.getMenuItemId() + " cannot exceed " + MAX_ITEM_QUANTITY);
             }
 
             MenuLookupService.MenuItemInfo itemInfo = menuLookupService.getItem(itemReq.getMenuItemId());
@@ -158,6 +185,11 @@ public class OrderService {
             order.addItem(orderItem);
 
             subtotal = subtotal.add(lineTotal);
+        }
+
+        if (subtotal.compareTo(MINIMUM_ORDER_SUBTOTAL) < 0) {
+            throw new IllegalArgumentException("Minimum order subtotal is LKR " + MINIMUM_ORDER_SUBTOTAL.setScale(2, RoundingMode.HALF_UP) +
+                    ". Your current subtotal is LKR " + subtotal.setScale(2, RoundingMode.HALF_UP));
         }
 
         order.setSubtotal(subtotal.setScale(2, RoundingMode.HALF_UP));
@@ -259,6 +291,68 @@ public class OrderService {
         }
 
         order.setStatus(OrderStatus.CANCELLED);
+        if (order.getPaymentStatus() == PaymentStatus.VERIFIED) {
+            order.setRefundStatus(RefundStatus.PENDING);
+        }
+        Order updated = orderRepository.save(order);
+        return toOrderResponseDto(updated);
+    }
+
+    public OrderResponseDto updateOrderItem(Long orderId, Long itemId, Integer newQuantity) {
+        Order order = findOrderOrThrow(orderId);
+        OrderStatus current = order.getStatus();
+
+        if (!CANCELLABLE_STATUSES.contains(current)) {
+            throw new IllegalStateException("Cannot modify order items once preparation has started. Current status: " + current);
+        }
+
+        if (newQuantity == null || newQuantity < 0) {
+            throw new IllegalArgumentException("Quantity must be greater than or equal to 0");
+        }
+
+        if (newQuantity > MAX_ITEM_QUANTITY) {
+            throw new IllegalArgumentException("Quantity cannot exceed maximum limit of " + MAX_ITEM_QUANTITY);
+        }
+
+        OrderItem targetItem = order.getItems().stream()
+                .filter(item -> Objects.equals(item.getId(), itemId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Order item " + itemId + " not found in order " + orderId));
+
+        if (newQuantity == 0) {
+            if (order.getItems().size() <= 1) {
+                throw new IllegalStateException("Cannot remove the only remaining item from the order. To cancel the order, please use the cancel endpoint.");
+            }
+            order.getItems().remove(targetItem);
+        } else {
+            targetItem.setQuantity(newQuantity);
+            targetItem.setLineTotal(targetItem.getUnitPriceSnapshot()
+                    .multiply(BigDecimal.valueOf(newQuantity))
+                    .setScale(2, RoundingMode.HALF_UP));
+        }
+
+        // Recalculate subtotal
+        BigDecimal subtotal = order.getItems().stream()
+                .map(OrderItem::getLineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+        order.setSubtotal(subtotal);
+
+        // Recalculate 5% tax
+        BigDecimal taxAmount = subtotal.multiply(TAX_RATE).setScale(2, RoundingMode.HALF_UP);
+        order.setTaxAmount(taxAmount);
+
+        // Discount cannot exceed subtotal
+        BigDecimal discount = order.getDiscountAmount();
+        if (discount.compareTo(subtotal) > 0) {
+            discount = subtotal;
+            order.setDiscountAmount(discount);
+        }
+
+        // Grand Total = subtotal + deliveryFee + taxAmount - discountAmount
+        BigDecimal grandTotal = subtotal.add(order.getDeliveryFee()).add(taxAmount).subtract(discount).setScale(2, RoundingMode.HALF_UP);
+        order.setGrandTotal(grandTotal);
+
         Order updated = orderRepository.save(order);
         return toOrderResponseDto(updated);
     }
@@ -398,6 +492,62 @@ public class OrderService {
         return savedAddressRepository.save(new SavedAddress(customerId, addressLine.trim(), city));
     }
 
+    public ClaimOrdersResponseDto claimGuestOrders(Long customerId, String email, String phone) {
+        if (customerId == null) {
+            throw new IllegalArgumentException("Customer ID is required to claim orders");
+        }
+
+        List<Order> unclaimed = orderRepository.findUnclaimedGuestOrders(
+                email != null ? email.trim() : null,
+                phone != null ? phone.trim() : null
+        );
+
+        if (unclaimed.isEmpty()) {
+            return new ClaimOrdersResponseDto(0, List.of(), "No unclaimed guest orders found matching your profile");
+        }
+
+        List<Long> claimedIds = new ArrayList<>();
+        for (Order order : unclaimed) {
+            order.setCustomerId(customerId);
+            claimedIds.add(order.getId());
+        }
+
+        orderRepository.saveAll(unclaimed);
+
+        return new ClaimOrdersResponseDto(
+                claimedIds.size(),
+                claimedIds,
+                "Successfully claimed " + claimedIds.size() + " guest order(s) and linked them to your account"
+        );
+    }
+
+    @Transactional
+    public int autoCancelAbandonedOrders(int timeoutMinutes) {
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(timeoutMinutes);
+        List<Order> abandoned = orderRepository.findByStatusAndPaymentStatusAndCreatedAtBefore(
+                OrderStatus.PLACED,
+                PaymentStatus.PENDING,
+                cutoff
+        );
+
+        for (Order order : abandoned) {
+            order.setStatus(OrderStatus.CANCELLED);
+            order.setCancellationReason("TIMEOUT");
+        }
+
+        if (!abandoned.isEmpty()) {
+            orderRepository.saveAll(abandoned);
+        }
+
+        return abandoned.size();
+    }
+
+    @Scheduled(fixedRate = 60000)
+    @Transactional
+    public void scheduleAutoCancelAbandonedOrders() {
+        autoCancelAbandonedOrders(15);
+    }
+
     private OrderResponseDto toOrderResponseDto(Order order) {
         OrderResponseDto dto = new OrderResponseDto();
         dto.setId(order.getId());
@@ -408,6 +558,8 @@ public class OrderService {
         dto.setGuestPhone(order.getGuestPhone());
         dto.setGuestEmail(order.getGuestEmail());
         dto.setBranchId(order.getBranchId());
+        dto.setBranchNameSnapshot(order.getBranchNameSnapshot());
+        dto.setBranchAddressSnapshot(order.getBranchAddressSnapshot());
         dto.setFulfillmentType(order.getFulfillmentType());
         dto.setDeliveryAddress(order.getDeliveryAddress());
         dto.setStatus(order.getStatus());
@@ -418,7 +570,11 @@ public class OrderService {
         dto.setGrandTotal(order.getGrandTotal());
         dto.setPromoCode(order.getPromoCode());
         dto.setPaymentStatus(order.getPaymentStatus());
+        dto.setRefundStatus(order.getRefundStatus());
         dto.setPaymentMethod(order.getPaymentMethod());
+        dto.setIdempotencyKey(order.getIdempotencyKey());
+        dto.setVersion(order.getVersion());
+        dto.setCancellationReason(order.getCancellationReason());
         dto.setCreatedAt(order.getCreatedAt());
         dto.setUpdatedAt(order.getUpdatedAt());
 

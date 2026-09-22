@@ -19,6 +19,10 @@ import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { placeOrder, getSavedAddresses } from '../api/orderApi'
 import { MOCK_BRANCHES } from '../mocks/orderMockData'
+
+const MIN_ORDER_SUBTOTAL = 500
+const MAX_DISTINCT_ITEMS = 20
+const MAX_ITEM_QUANTITY = 50
 import type { SavedAddress, OrderRequest } from '../types/order'
 
 // Sri Lankan phone validation regex: accepts 07XXXXXXXX or +947XXXXXXXX
@@ -59,6 +63,11 @@ export function CheckoutPage() {
   // Order submission state
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [idempotencyKey] = useState<string>(() =>
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `idemp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+  )
 
   const branch = MOCK_BRANCHES.find((b) => b.id === branchId)
 
@@ -131,6 +140,22 @@ export function CheckoutPage() {
       return
     }
 
+    if (subtotal < MIN_ORDER_SUBTOTAL) {
+      setError(`Minimum order subtotal is LKR ${MIN_ORDER_SUBTOTAL.toFixed(2)}. Your current subtotal is LKR ${subtotal.toFixed(2)}. Please add items worth at least LKR ${(MIN_ORDER_SUBTOTAL - subtotal).toFixed(2)} more.`)
+      return
+    }
+
+    if (items.length > MAX_DISTINCT_ITEMS) {
+      setError(`Your cart contains ${items.length} distinct items, exceeding the maximum limit of ${MAX_DISTINCT_ITEMS}.`)
+      return
+    }
+
+    const itemExceedingQty = items.find((i) => i.quantity > MAX_ITEM_QUANTITY)
+    if (itemExceedingQty) {
+      setError(`Quantity for "${itemExceedingQty.name}" exceeds the maximum limit of ${MAX_ITEM_QUANTITY}.`)
+      return
+    }
+
     setSubmitting(true)
 
     try {
@@ -147,6 +172,7 @@ export function CheckoutPage() {
         city: fulfillmentType === 'DELIVERY' && city.trim() ? city.trim() : null,
         saveAddress: fulfillmentType === 'DELIVERY' && saveAddress,
         promoCode: promoCode ? promoCode.trim() : null,
+        idempotencyKey: idempotencyKey,
         items: items.map((i) => ({
           menuItemId: i.menuItemId,
           quantity: i.quantity,
@@ -502,6 +528,16 @@ export function CheckoutPage() {
               </div>
             </div>
 
+            {/* Minimum Order Value Warning */}
+            {subtotal < MIN_ORDER_SUBTOTAL && (
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-xs text-amber-900">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span className="leading-snug">
+                  Minimum order subtotal is <strong>Rs. {MIN_ORDER_SUBTOTAL.toFixed(2)}</strong>. Please add <strong>Rs. {(MIN_ORDER_SUBTOTAL - subtotal).toFixed(2)}</strong> more to place order.
+                </span>
+              </div>
+            )}
+
             {/* Error Notification */}
             {error && (
               <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex items-start gap-2.5 text-xs text-rose-700">
@@ -513,11 +549,11 @@ export function CheckoutPage() {
             {/* Submit Button */}
             <button
               type="button"
-              disabled={submitting}
+              disabled={submitting || subtotal < MIN_ORDER_SUBTOTAL}
               onClick={handlePlaceOrder}
               className={`w-full py-4 px-4 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition shadow-md ${
-                submitting
-                  ? 'bg-stone-300 text-stone-500 cursor-not-allowed'
+                submitting || subtotal < MIN_ORDER_SUBTOTAL
+                  ? 'bg-stone-200 text-stone-400 border border-stone-300 cursor-not-allowed'
                   : 'bg-[#E4002B] hover:bg-[#C30024] text-white shadow-red-500/20 active:scale-98 cursor-pointer'
               }`}
             >
@@ -526,6 +562,8 @@ export function CheckoutPage() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Submitting Order...</span>
                 </>
+              ) : subtotal < MIN_ORDER_SUBTOTAL ? (
+                <span>Min Order LKR {MIN_ORDER_SUBTOTAL.toFixed(2)} Required</span>
               ) : (
                 <span>Place Order (Proceed to Payment)</span>
               )}

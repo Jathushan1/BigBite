@@ -26,6 +26,7 @@ public class OrderRequestDto {
     private String city;
     private boolean saveAddress;
     private String promoCode;
+    private String idempotencyKey;
 
     @NotEmpty(message = "Order must contain at least one item")
     @Valid
@@ -150,5 +151,13 @@ public class OrderRequestDto {
 
     public void setItems(List<OrderItemRequestDto> items) {
         this.items = items;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
     }
 }

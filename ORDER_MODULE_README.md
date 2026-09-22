@@ -10,10 +10,11 @@ A robust, self-contained **Order & Billing Module** built for the **BigBite** fo
 3. [Mock Services Catalog](#mock-services-catalog)
 4. [Backend API Reference](#backend-api-reference)
 5. [Data Models & Schema](#data-models--schema)
-6. [Frontend Architecture & Routes](#frontend-architecture--routes)
-7. [Getting Started & Setup](#getting-started--setup)
-8. [Automated Tests & Quality Gates](#automated-tests--quality-gates)
-9. [End-to-End Verification Guide](#end-to-end-verification-guide)
+6. [Business Rules & Financial Precision](#business-rules--financial-precision)
+7. [Frontend Architecture & Routes](#frontend-architecture--routes)
+8. [Getting Started & Setup](#getting-started--setup)
+9. [Automated Tests & Quality Gates](#automated-tests--quality-gates)
+10. [End-to-End Verification Guide](#end-to-end-verification-guide)
 
 ---
 
@@ -252,6 +253,32 @@ Base URL: `http://localhost:8080/api/orders`
 | `unit_price_snapshot`| DECIMAL(10,2)| Snapshotted unit price at order time |
 | `quantity` | INT | Quantity ordered |
 | `line_total` | DECIMAL(10,2)| `unitPriceSnapshot * quantity` |
+
+---
+
+## Business Rules & Financial Precision
+
+### 1. Currency & Rounding Specification
+- **Currency**: Sri Lankan Rupee (`LKR` / `Rs.`).
+- **Precision**: All financial calculations (`subtotal`, `deliveryFee`, `taxAmount`, `discountAmount`, `grandTotal`, `unitPriceSnapshot`, and `lineTotal`) are strictly evaluated using `java.math.BigDecimal` fixed at **2 decimal places (`scale = 2`)**.
+- **Rounding Mode**: All intermediate calculations and final totals use **`RoundingMode.HALF_UP`** (standard commercial / banking rounding):
+  $$\text{Value} = \text{roundTo}(\text{val}, 2, \text{HALF\_UP})$$
+  This deliberate design ensures deterministic arithmetic across financial reports, eliminates IEEE-754 floating-point inaccuracies, and prevents currency drift between order creation, item modification, and invoice generation.
+
+### 2. Tax & Surcharge Rules
+- **Tax Rate**: 5.00% standard sales tax (`TAX_RATE = 0.05`), calculated as:
+  $$\text{taxAmount} = \text{subtotal} \times 0.05 \quad (\text{scale } 2, \text{HALF\_UP})$$
+- **Delivery Surcharge**: Flat LKR 300.00 for `DELIVERY` fulfillment; LKR 0.00 for `TAKEAWAY`.
+- **Grand Total Invariant**:
+  $$\text{grandTotal} = \max(0, \text{subtotal} + \text{deliveryFee} + \text{taxAmount} - \text{discountAmount})$$
+
+### 3. Cart & Order Constraints
+- **Minimum Order Value**: LKR 500.00 minimum subtotal required to place an order.
+- **Max Distinct Items**: Up to 20 distinct menu items per order.
+- **Max Item Quantity**: Maximum 50 units per line item.
+- **Idempotency Guard**: Client submits UUID `idempotencyKey`; duplicate requests return existing order without double-charging or creating duplicate database rows.
+- **Concurrency Guard**: Optimistic locking via JPA `@Version` column returns `409 Conflict` if concurrent staff or processes attempt overlapping state mutations.
+- **Timeout / Abandonment Auto-Cancel**: Background `@Scheduled` job detects `status = PLACED` & `paymentStatus = PENDING` orders older than 15 minutes and transitions them to `CANCELLED` (reason: `TIMEOUT`).
 
 ---
 
