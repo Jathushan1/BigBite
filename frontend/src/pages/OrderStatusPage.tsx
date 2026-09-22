@@ -46,10 +46,29 @@ export function OrderStatusPage() {
     }
   }
 
-  useEffect(() => {
-    if (numericOrderId) {
-      fetchData()
+  const fetchSilent = async () => {
+    try {
+      const [orderData, billData] = await Promise.all([
+        getOrder(numericOrderId),
+        getOrderBill(numericOrderId),
+      ])
+      setOrder(orderData)
+      setBill(billData)
+    } catch {
+      // background poll silently ignores network blips
     }
+  }
+
+  useEffect(() => {
+    if (!numericOrderId) return
+    fetchData()
+
+    // Real-time polling every 2.5s so customer status automatically updates when staff advances the order
+    const interval = setInterval(() => {
+      fetchSilent()
+    }, 2500)
+
+    return () => clearInterval(interval)
   }, [numericOrderId])
 
   const handleCancelOrder = async () => {

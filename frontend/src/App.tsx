@@ -17,6 +17,7 @@ import { PaymentPage } from './pages/PaymentPage'
 import { OrderStatusPage } from './pages/OrderStatusPage'
 import { OrderHistoryPage } from './pages/OrderHistoryPage'
 import { StaffOrderListPage } from './pages/StaffOrderListPage'
+import { CustomerHome } from './pages/CustomerHome'
 
 export default function App() {
   return (
@@ -88,6 +89,22 @@ export default function App() {
                   element={
                     <ProtectedRoute allowedRoles={['CUSTOMER']}>
                       <OrderHistoryPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/customer/profile"
+                  element={
+                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
+                      <CustomerHome />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/profile"
+                  element={
+                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
+                      <CustomerHome />
                     </ProtectedRoute>
                   }
                 />

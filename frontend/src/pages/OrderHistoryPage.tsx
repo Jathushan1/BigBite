@@ -31,8 +31,23 @@ export function OrderHistoryPage() {
     }
   }
 
+  const loadHistorySilent = async () => {
+    try {
+      const data = await getOrderHistory(customerId)
+      setOrders(data)
+    } catch {
+      // background poll
+    }
+  }
+
   useEffect(() => {
     loadHistory()
+
+    const interval = setInterval(() => {
+      loadHistorySilent()
+    }, 3000)
+
+    return () => clearInterval(interval)
   }, [customerId])
 
   const getStatusBadge = (status: string) => {

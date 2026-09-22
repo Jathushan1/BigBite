@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { registerCustomerApi, registerStaffApi } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -33,8 +33,14 @@ export const RegisterPage: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  const { login, getRoleLandingPath } = useAuth()
+  const { user, login, getRoleLandingPath } = useAuth()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (user) {
+      navigate(getRoleLandingPath(user.role), { replace: true })
+    }
+  }, [user, navigate, getRoleLandingPath])
 
   const SRI_LANKAN_PHONE_REGEX = /^(?:\+94|0)[1-9][0-9]{8}$/
   const STRONG_PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/

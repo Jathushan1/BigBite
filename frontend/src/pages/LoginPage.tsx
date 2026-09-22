@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { AlertCircle, LogIn } from 'lucide-react'
@@ -10,8 +10,14 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  const { login, getRoleLandingPath } = useAuth()
+  const { user, login, getRoleLandingPath } = useAuth()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (user) {
+      navigate(getRoleLandingPath(user.role), { replace: true })
+    }
+  }, [user, navigate, getRoleLandingPath])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -2,7 +2,6 @@ import React from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { WelcomePage } from '../pages/WelcomePage'
-import { CustomerHome } from '../pages/CustomerHome'
 
 export const RootRouteResolver: React.FC = () => {
   const { user, token, isLoading } = useAuth()
@@ -24,7 +23,9 @@ export const RootRouteResolver: React.FC = () => {
 
   switch (user.role) {
     case 'CUSTOMER':
-      return <CustomerHome />
+      // The home page (/) is the Welcome & Marketing Home page.
+      // Customer profile is hosted at /customer/profile.
+      return <WelcomePage />
     case 'SUPER_ADMIN':
       return <Navigate to="/admin" replace />
     case 'BRANCH_MANAGER':

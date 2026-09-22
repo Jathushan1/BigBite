@@ -180,6 +180,24 @@ On first startup, the initial Super Admin account is auto-seeded:
 - **Email**: `admin@bigbite.com`
 - **Password**: `Admin@123`
 
+BRANCH MANAGER 
+ MAIL :Abiabishek25@gmail.com
+ PASS : Abiabishek#25
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ### Running the Automated Tests
 
 To run the full suite of unit tests for registration, status-gated login, and admin approval workflows:

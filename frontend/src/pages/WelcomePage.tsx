@@ -2,35 +2,13 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Utensils, ShieldCheck, Zap, Award, Sparkles, Heart } from 'lucide-react'
 import { Logo } from '../components/Logo'
+import { useAuth } from '../context/AuthContext'
 
 export const WelcomePage: React.FC = () => {
+  const { user } = useAuth()
+
   return (
     <div className="min-h-screen bg-white text-neutral-900 flex flex-col font-sans selection:bg-[#E4002B] selection:text-white">
-      {/* Top Welcome Header */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-neutral-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
-          <Link to="/" className="group transition-transform hover:scale-[1.02]">
-            <Logo />
-          </Link>
-
-          <div className="flex items-center gap-3">
-            <Link
-              to="/login"
-              className="px-4 py-2 text-sm font-bold text-neutral-700 hover:text-[#E4002B] transition"
-            >
-              Sign In
-            </Link>
-            <Link
-              to="/register"
-              className="px-5 py-2.5 rounded-full bg-[#E4002B] hover:bg-[#C40024] text-white font-extrabold text-sm shadow-md shadow-red-600/20 transition active:scale-95 flex items-center gap-1.5"
-            >
-              <span>Get Started</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-        </div>
-      </header>
-
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-neutral-950 text-white py-20 lg:py-28">
         {/* Background Image with Dark Vignette Overlay */}
@@ -61,19 +39,28 @@ export const WelcomePage: React.FC = () => {
 
             <div className="pt-4 flex flex-col sm:flex-row gap-4">
               <Link
-                to="/login"
+                to={user ? "/order" : "/login"}
                 className="inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-2xl bg-[#E4002B] hover:bg-[#C40024] text-white text-base font-black tracking-wide shadow-xl shadow-red-600/30 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
               >
                 <span>Order Now</span>
                 <ArrowRight className="w-5 h-5 stroke-[2.5]" />
               </Link>
 
-              <Link
-                to="/register"
-                className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-base font-bold backdrop-blur-md border border-white/20 transition cursor-pointer"
-              >
-                <span>Create Account</span>
-              </Link>
+              {user ? (
+                <Link
+                  to="/customer/profile"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-base font-bold backdrop-blur-md border border-white/20 transition cursor-pointer"
+                >
+                  <span>My Profile</span>
+                </Link>
+              ) : (
+                <Link
+                  to="/register"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-base font-bold backdrop-blur-md border border-white/20 transition cursor-pointer"
+                >
+                  <span>Create Account</span>
+                </Link>
+              )}
             </div>
 
             {/* Quick trust metrics */}
@@ -160,14 +147,16 @@ export const WelcomePage: React.FC = () => {
             Ready to Take Your First <span className="text-[#E4002B]">BigBite</span>?
           </h2>
           <p className="text-neutral-600 text-base max-w-xl mx-auto">
-            Sign in or create your free account now to select your branch and order your favorite slice in seconds.
+            {user
+              ? "Select your branch now and order your favorite piping-hot pizzas in seconds."
+              : "Sign in or create your free account now to select your branch and order your favorite slice in seconds."}
           </p>
           <div className="pt-2">
             <Link
-              to="/login"
+              to={user ? "/order" : "/login"}
               className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-[#E4002B] hover:bg-[#C40024] text-white text-base font-black shadow-lg shadow-red-600/20 transition active:scale-95"
             >
-              <span>Get Started Now</span>
+              <span>{user ? "Order Food Now" : "Get Started Now"}</span>
               <ArrowRight className="w-5 h-5" />
             </Link>
           </div>

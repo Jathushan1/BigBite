@@ -131,9 +131,9 @@ Base URL: `http://localhost:8080/api/orders`
 ```json
 {
   "customerId": null,
-  "guestName": "John Doe",
+  "guestName": "Customer name ",
   "guestPhone": "+94771234567",
-  "guestEmail": "john@example.com",
+  "guestEmail": "name@example.com",
   "branchId": 1,
   "fulfillmentType": "DELIVERY",
   "deliveryAddress": "42 Galle Road, Colombo 03",

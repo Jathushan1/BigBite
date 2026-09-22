@@ -1,37 +1,15 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { LogOut, ShoppingBag, Shield, Store, Clock, ArrowRight } from 'lucide-react'
-import { Logo } from '../components/Logo'
+import { ShoppingBag, Shield, Store, Clock, ArrowRight, Phone, Mail, User } from 'lucide-react'
 
 export const CustomerHome: React.FC = () => {
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-neutral-900 flex flex-col font-sans">
-      {/* Top Customer Header */}
-      <header className="border-b border-neutral-200 bg-white/95 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-xs">
-        <Link to="/" className="flex items-center group transition-transform hover:scale-[1.02]">
-          <Logo />
-        </Link>
-
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <p className="text-sm font-extrabold text-neutral-900">{user?.name}</p>
-            <p className="text-xs text-[#E4002B] font-bold">Valued Customer</p>
-          </div>
-          <button
-            onClick={logout}
-            className="p-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 hover:text-neutral-900 transition cursor-pointer"
-            title="Logout"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
-      </header>
-
       {/* Main Content */}
-      <main className="flex-1 max-w-5xl w-full mx-auto p-6 space-y-8">
+      <main className="flex-1 max-w-5xl w-full mx-auto p-6 sm:p-8 space-y-8">
         {/* Welcome Hero Banner */}
         <div className="bg-gradient-to-r from-red-600 to-[#E4002B] text-white rounded-3xl p-8 sm:p-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl shadow-red-600/15">
           <div className="space-y-3 max-w-xl">
@@ -64,13 +42,28 @@ export const CustomerHome: React.FC = () => {
               <Shield className="w-6 h-6" />
             </div>
             <h3 className="font-extrabold text-neutral-900 text-lg">Account Profile</h3>
-            <p className="text-xs text-neutral-600">
-              Account Status:{' '}
-              <span className="text-emerald-600 font-bold px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200">
-                {user?.status}
-              </span>
-            </p>
-            <p className="text-xs text-neutral-500 truncate">Email: {user?.email}</p>
+            <div className="space-y-1.5 text-xs text-neutral-600">
+              <p className="flex items-center gap-1.5 font-medium text-neutral-800">
+                <User className="w-3.5 h-3.5 text-neutral-400" />
+                <span>{user?.name}</span>
+              </p>
+              <p className="flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-neutral-400" />
+                <span className="truncate">{user?.email}</span>
+              </p>
+              {user?.phoneNumber && (
+                <p className="flex items-center gap-1.5 font-mono">
+                  <Phone className="w-3.5 h-3.5 text-neutral-400" />
+                  <span>{user.phoneNumber}</span>
+                </p>
+              )}
+              <div className="pt-1">
+                Account Status:{' '}
+                <span className="text-emerald-700 font-bold px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200">
+                  {user?.status}
+                </span>
+              </div>
+            </div>
           </div>
 
           <Link

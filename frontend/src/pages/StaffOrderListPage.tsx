@@ -41,8 +41,24 @@ export function StaffOrderListPage() {
     }
   }
 
+  const loadOrdersSilently = async () => {
+    try {
+      const params: any = {}
+      if (selectedBranch !== 'all') params.branchId = Number(selectedBranch)
+      if (selectedStatus !== 'all') params.status = selectedStatus
+      const data = await getOrders(params)
+      setOrders(data)
+    } catch {
+      // background poll silently ignores
+    }
+  }
+
   useEffect(() => {
     loadOrders()
+    const interval = setInterval(() => {
+      loadOrdersSilently()
+    }, 3500)
+    return () => clearInterval(interval)
   }, [selectedBranch, selectedStatus])
 
   const handleAdvanceStatus = async (orderId: number, nextStatus: OrderStatus) => {
@@ -63,7 +79,7 @@ export function StaffOrderListPage() {
   const getNextAction = (order: OrderResponse): { label: string; nextStatus: OrderStatus } | null => {
     switch (order.status) {
       case 'PLACED':
-        return null // Awaiting payment confirmation / COD selection
+        return { label: 'Approve & Confirm', nextStatus: 'CONFIRMED' }
       case 'PAYMENT_VERIFIED':
         return { label: 'Confirm Order', nextStatus: 'CONFIRMED' }
       case 'CONFIRMED':
@@ -77,6 +93,19 @@ export function StaffOrderListPage() {
       case 'DELIVERED':
       case 'READY_FOR_PICKUP':
         return { label: 'Complete Order', nextStatus: 'COMPLETED' }
+      default:
+        return null
+    }
+  }
+
+  const getSecondaryAction = (order: OrderResponse): { label: string; nextStatus: OrderStatus } | null => {
+    switch (order.status) {
+      case 'PREPARING':
+        return order.fulfillmentType === 'DELIVERY'
+          ? { label: 'Ready for Pickup', nextStatus: 'READY_FOR_PICKUP' }
+          : null
+      case 'OUT_FOR_DELIVERY':
+        return { label: 'Direct Complete', nextStatus: 'COMPLETED' }
       default:
         return null
     }
@@ -199,6 +228,7 @@ export function StaffOrderListPage() {
         <div className="space-y-4">
           {orders.map((order) => {
             const nextAction = getNextAction(order)
+            const secondaryAction = getSecondaryAction(order)
             const isUpdating = updatingId === order.id
 
             return (
@@ -271,6 +301,17 @@ export function StaffOrderListPage() {
                       {isUpdating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       <span>{nextAction.label}</span>
                       <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
+                    </button>
+                  )}
+
+                  {secondaryAction && (
+                    <button
+                      type="button"
+                      disabled={isUpdating}
+                      onClick={() => handleAdvanceStatus(order.id, secondaryAction.nextStatus)}
+                      className="px-3.5 py-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 font-bold text-xs border border-neutral-300 flex items-center gap-1.5 transition cursor-pointer active:scale-95 disabled:opacity-50"
+                    >
+                      <span>{secondaryAction.label}</span>
                     </button>
                   )}
 

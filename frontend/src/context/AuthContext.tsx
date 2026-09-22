@@ -22,6 +22,7 @@ export function getRoleLandingPath(role: Role): string {
     case 'DELIVERY_PARTNER':
       return '/delivery/dashboard'
     case 'CUSTOMER':
+      return '/customer/profile'
     default:
       return '/'
   }

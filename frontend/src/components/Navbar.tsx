@@ -21,8 +21,8 @@ export const Navbar: React.FC = () => {
   const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  // On the welcome landing page (/ when not logged in), the welcome page provides its own marketing header
-  if (location.pathname === '/' && !user) {
+  // Dedicated auth pages (/login, /register) have their own focused layout without top navbar
+  if (location.pathname === '/login' || location.pathname === '/register') {
     return null
   }
 
@@ -31,6 +31,7 @@ export const Navbar: React.FC = () => {
       return true
     }
     if (path === '/orders' && location.pathname.startsWith('/orders')) return true
+    if (path === '/customer/profile' && (location.pathname === '/customer/profile' || location.pathname === '/profile')) return true
     if (path === '/staff/orders' && location.pathname.startsWith('/staff')) return true
     if (path === '/admin' && location.pathname.startsWith('/admin')) return true
     if (path.includes('/dashboard') && location.pathname.includes('/dashboard')) return true
@@ -48,6 +49,7 @@ export const Navbar: React.FC = () => {
       case 'DELIVERY_PARTNER':
         return '/delivery/dashboard'
       case 'CUSTOMER':
+        return '/customer/profile'
       default:
         return '/'
     }
@@ -75,9 +77,9 @@ export const Navbar: React.FC = () => {
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-neutral-200 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-18">
-          {/* Red & White Logo */}
+          {/* Red & White Logo — Always routes to Home page (/) */}
           <Link
-            to={user ? getDashboardPath() : '/'}
+            to="/"
             className="flex items-center group transition-transform hover:scale-[1.02]"
             onClick={() => setMobileMenuOpen(false)}
           >
@@ -111,6 +113,18 @@ export const Navbar: React.FC = () => {
                 >
                   <Clock className="w-4 h-4" />
                   <span>My Orders</span>
+                </Link>
+
+                <Link
+                  to="/customer/profile"
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold transition ${
+                    isActive('/customer/profile')
+                      ? 'bg-red-50 text-[#E4002B] border border-red-100 shadow-xs'
+                      : 'text-neutral-700 hover:text-[#E4002B] hover:bg-neutral-100/80'
+                  }`}
+                >
+                  <UserIcon className="w-4 h-4" />
+                  <span>Profile</span>
                 </Link>
 
                 {/* Cart Button */}
@@ -198,18 +212,24 @@ export const Navbar: React.FC = () => {
             {/* 5. USER PROFILE & LOGOUT MENU (ANY LOGGED-IN ROLE) */}
             {user && (
               <div className="ml-3 pl-3 border-l border-neutral-200 flex items-center gap-3">
-                <div className="text-right hidden lg:block">
-                  <p className="text-xs font-black text-neutral-900 leading-tight truncate max-w-[140px]">
-                    {user.name}
-                  </p>
-                  <p className="text-[10px] font-bold text-[#E4002B] uppercase tracking-wider">
-                    {getRoleLabel()}
-                  </p>
-                </div>
+                <Link
+                  to={getDashboardPath()}
+                  className="flex items-center gap-2.5 group hover:opacity-85 transition"
+                  title="View Profile / Dashboard"
+                >
+                  <div className="text-right hidden lg:block">
+                    <p className="text-xs font-black text-neutral-900 leading-tight truncate max-w-[140px] group-hover:text-[#E4002B] transition">
+                      {user.name}
+                    </p>
+                    <p className="text-[10px] font-bold text-[#E4002B] uppercase tracking-wider">
+                      {getRoleLabel()}
+                    </p>
+                  </div>
 
-                <div className="w-8 h-8 rounded-full bg-red-50 text-[#E4002B] border border-red-100 flex items-center justify-center font-black text-xs">
-                  {user.name ? user.name.charAt(0).toUpperCase() : <UserIcon className="w-4 h-4" />}
-                </div>
+                  <div className="w-8 h-8 rounded-full bg-red-50 text-[#E4002B] border border-red-100 flex items-center justify-center font-black text-xs group-hover:bg-red-100 transition">
+                    {user.name ? user.name.charAt(0).toUpperCase() : <UserIcon className="w-4 h-4" />}
+                  </div>
+                </Link>
 
                 <button
                   type="button"
@@ -274,6 +294,17 @@ export const Navbar: React.FC = () => {
               >
                 <Clock className="w-4 h-4" />
                 <span>My Orders</span>
+              </Link>
+
+              <Link
+                to="/customer/profile"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold ${
+                  isActive('/customer/profile') ? 'bg-red-50 text-[#E4002B]' : 'text-neutral-700 hover:bg-neutral-50'
+                }`}
+              >
+                <UserIcon className="w-4 h-4" />
+                <span>My Profile</span>
               </Link>
 
               <Link
@@ -348,10 +379,19 @@ export const Navbar: React.FC = () => {
 
           {user && (
             <div className="pt-3 mt-2 border-t border-neutral-200 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-black text-neutral-900">{user.name}</p>
-                <p className="text-[10px] font-bold text-[#E4002B] uppercase">{getRoleLabel()}</p>
-              </div>
+              <Link
+                to={getDashboardPath()}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2"
+              >
+                <div className="w-7 h-7 rounded-full bg-red-50 text-[#E4002B] border border-red-100 flex items-center justify-center font-bold text-xs">
+                  {user.name ? user.name.charAt(0).toUpperCase() : <UserIcon className="w-3.5 h-3.5" />}
+                </div>
+                <div>
+                  <p className="text-xs font-black text-neutral-900">{user.name}</p>
+                  <p className="text-[10px] font-bold text-[#E4002B] uppercase">{getRoleLabel()}</p>
+                </div>
+              </Link>
 
               <button
                 type="button"
