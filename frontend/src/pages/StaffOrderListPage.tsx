@@ -5,8 +5,6 @@ import {
   RefreshCw,
   Loader2,
   ArrowRight,
-  CheckCircle2,
-  AlertCircle,
   Store,
   MapPin,
   Phone,
@@ -16,6 +14,10 @@ import { getOrders, updateOrderStatus } from '../api/orderApi'
 import type { OrderResponse, OrderStatus } from '../types/order'
 import { MOCK_BRANCHES } from '../mocks/orderMockData'
 import { useAuth } from '../context/AuthContext'
+import { ResponsiveDataView, type ColumnDef } from '../components/ResponsiveDataView'
+import { StatusBadge } from '../components/StatusBadge'
+import { Button } from '@/components/ui/button'
+import { toast } from '@/components/ui/sonner'
 
 export function StaffOrderListPage() {
   const { user } = useAuth()
@@ -24,20 +26,17 @@ export function StaffOrderListPage() {
   const [orders, setOrders] = useState<OrderResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [updatingId, setUpdatingId] = useState<number | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   const loadOrders = async () => {
     try {
       setLoading(true)
-      setError(null)
       const params: any = {}
       if (selectedBranch !== 'all') params.branchId = Number(selectedBranch)
       if (selectedStatus !== 'all') params.status = selectedStatus
       const data = await getOrders(params)
       setOrders(data)
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch staff orders')
+      toast.error(err.message || 'Failed to fetch staff orders')
     } finally {
       setLoading(false)
     }
@@ -51,7 +50,7 @@ export function StaffOrderListPage() {
       const data = await getOrders(params)
       setOrders(data)
     } catch {
-      // background poll silently ignores
+      // background poll
     }
   }
 
@@ -66,10 +65,8 @@ export function StaffOrderListPage() {
   const handleAdvanceStatus = async (orderId: number, nextStatus: OrderStatus) => {
     try {
       setUpdatingId(orderId)
-      setMessage(null)
-      setError(null)
       await updateOrderStatus(orderId, nextStatus)
-      setMessage(`Order #${orderId} successfully advanced to ${nextStatus}`)
+      toast.success(`Order #${orderId} advanced to ${nextStatus}`)
       await loadOrders()
     } catch (err: any) {
       const errMsg = err.message || `Failed to advance order #${orderId}`
@@ -77,12 +74,14 @@ export function StaffOrderListPage() {
         errMsg.toLowerCase().includes('conflict') ||
         errMsg.toLowerCase().includes('updated by another') ||
         errMsg.toLowerCase().includes('status 409') ||
-        errMsg.toLowerCase().includes('just updated')
+        errMsg.toLowerCase().includes('409')
       ) {
-        setError(`Conflict detected: Order #${orderId} was updated elsewhere. List has been refreshed.`)
+        toast.error(`409 Conflict: Order #${orderId} was updated by another user. Queue refreshed.`, {
+          duration: 5000,
+        })
         await loadOrders()
       } else {
-        setError(errMsg)
+        toast.error(errMsg)
       }
     } finally {
       setUpdatingId(null)
@@ -125,7 +124,7 @@ export function StaffOrderListPage() {
   }
 
   const canAdvanceStatus = (order: OrderResponse, nextStatus: OrderStatus): boolean => {
-    if (!user) return true // unauthenticated preview mode allows testing all transitions
+    if (!user) return true
     if (user.role === 'SUPER_ADMIN') return true
     if (user.role === 'CUSTOMER') return false
 
@@ -142,22 +141,200 @@ export function StaffOrderListPage() {
     return false
   }
 
-  const getStatusPill = (status: string) => {
-    switch (status) {
-      case 'CONFIRMED':
-        return 'bg-blue-50 text-blue-700 border-blue-200'
-      case 'PREPARING':
-      case 'OUT_FOR_DELIVERY':
-      case 'READY_FOR_PICKUP':
-        return 'bg-amber-50 text-amber-800 border-amber-200'
-      case 'DELIVERED':
-      case 'COMPLETED':
-        return 'bg-emerald-50 text-emerald-800 border-emerald-200'
-      case 'CANCELLED':
-        return 'bg-rose-50 text-rose-700 border-rose-200'
-      default:
-        return 'bg-neutral-100 text-neutral-700 border-neutral-200'
-    }
+  const columns: ColumnDef<OrderResponse>[] = [
+    {
+      header: 'Order',
+      cell: (order) => (
+        <div>
+          <span className="font-extrabold text-foreground">#{order.id}</span>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            Branch #{order.branchId} • {order.fulfillmentType}
+          </div>
+        </div>
+      ),
+    },
+    {
+      header: 'Customer',
+      cell: (order) => (
+        <div className="text-xs">
+          <p className="font-bold text-foreground">
+            {order.contactName || (order.customerId ? `User #${order.customerId}` : order.guestName)}
+          </p>
+          {order.contactPhone && (
+            <p className="text-muted-foreground flex items-center gap-1 font-mono">
+              <Phone className="w-3 h-3 text-primary" /> {order.contactPhone}
+            </p>
+          )}
+        </div>
+      ),
+    },
+    {
+      header: 'Status',
+      cell: (order) => <StatusBadge status={order.status} />,
+    },
+    {
+      header: 'Items',
+      cell: (order) => (
+        <div className="flex flex-wrap gap-1 max-w-[240px]">
+          {order.items.slice(0, 3).map((i) => (
+            <span
+              key={i.id}
+              className="px-2 py-0.5 bg-secondary rounded-md text-[11px] font-semibold text-secondary-foreground border border-border"
+            >
+              {i.itemNameSnapshot} × {i.quantity}
+            </span>
+          ))}
+          {order.items.length > 3 && (
+            <span className="text-[11px] text-muted-foreground self-center">
+              +{order.items.length - 3} more
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      header: 'Total',
+      cell: (order) => (
+        <span className="font-black text-foreground">
+          Rs. {order.grandTotal.toFixed(2)}
+        </span>
+      ),
+    },
+    {
+      header: 'Action',
+      className: 'text-right',
+      cell: (order) => {
+        const nextAction = getNextAction(order)
+        const isUpdating = updatingId === order.id
+        return (
+          <div className="flex items-center justify-end gap-2">
+            {nextAction && canAdvanceStatus(order, nextAction.nextStatus) ? (
+              <Button
+                size="sm"
+                disabled={isUpdating}
+                onClick={() => handleAdvanceStatus(order.id, nextAction.nextStatus)}
+                className="gap-1.5 text-xs shadow-xs"
+              >
+                {isUpdating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{nextAction.label}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
+            ) : nextAction && !canAdvanceStatus(order, nextAction.nextStatus) ? (
+              <span className="text-[11px] px-2.5 py-1 rounded-lg bg-secondary text-muted-foreground font-bold border border-border">
+                {user?.role === 'DELIVERY_PARTNER' ? 'Kitchen Action' : 'Role Restricted'}
+              </span>
+            ) : null}
+
+            <Link to={`/order/${order.id}`}>
+              <Button variant="ghost" size="icon" title="View Tracking View">
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </Link>
+          </div>
+        )
+      },
+    },
+  ]
+
+  const renderCard = (order: OrderResponse) => {
+    const nextAction = getNextAction(order)
+    const secondaryAction = getSecondaryAction(order)
+    const isUpdating = updatingId === order.id
+
+    return (
+      <div className="bg-card border border-border rounded-3xl p-5 shadow-xs space-y-4 hover:border-primary/40 transition-colors">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-black text-foreground">Order #{order.id}</span>
+            <span className="text-xs px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground font-bold uppercase">
+              {order.fulfillmentType}
+            </span>
+          </div>
+          <StatusBadge status={order.status} />
+        </div>
+
+        <div className="text-xs text-muted-foreground space-y-1">
+          <p className="flex items-center gap-1.5 font-medium text-foreground">
+            <User className="w-3.5 h-3.5 text-muted-foreground" />
+            <span>{order.contactName || (order.customerId ? `User #${order.customerId}` : order.guestName)}</span>
+            {order.contactPhone && (
+              <span className="inline-flex items-center gap-1 ml-2 font-mono text-muted-foreground">
+                <Phone className="w-3 h-3 text-primary" /> {order.contactPhone}
+              </span>
+            )}
+          </p>
+          <p className="flex items-center gap-1.5">
+            <Store className="w-3.5 h-3.5 text-muted-foreground" />
+            <span>Branch #{order.branchId}</span>
+            <span>•</span>
+            <span>Payment: {order.paymentStatus}</span>
+          </p>
+          {order.deliveryAddress && (
+            <p className="flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
+              <span>{order.deliveryAddress}</span>
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {order.items.map((i) => (
+            <span
+              key={i.id}
+              className="px-2.5 py-0.5 bg-secondary rounded-lg text-xs font-semibold text-secondary-foreground border border-border"
+            >
+              {i.itemNameSnapshot} × {i.quantity}
+            </span>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between pt-3 border-t border-border">
+          <div>
+            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">Total</span>
+            <span className="text-base font-black text-primary">
+              Rs. {order.grandTotal.toFixed(2)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {nextAction && canAdvanceStatus(order, nextAction.nextStatus) ? (
+              <Button
+                size="sm"
+                disabled={isUpdating}
+                onClick={() => handleAdvanceStatus(order.id, nextAction.nextStatus)}
+                className="gap-1 text-xs"
+              >
+                {isUpdating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{nextAction.label}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
+            ) : nextAction && !canAdvanceStatus(order, nextAction.nextStatus) ? (
+              <span className="text-[11px] px-2.5 py-1 rounded-lg bg-secondary text-muted-foreground font-bold border border-border">
+                {user?.role === 'DELIVERY_PARTNER' ? 'Kitchen Action' : 'Role Restricted'}
+              </span>
+            ) : null}
+
+            {secondaryAction && canAdvanceStatus(order, secondaryAction.nextStatus) && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isUpdating}
+                onClick={() => handleAdvanceStatus(order.id, secondaryAction.nextStatus)}
+                className="text-xs"
+              >
+                <span>{secondaryAction.label}</span>
+              </Button>
+            )}
+
+            <Link to={`/order/${order.id}`}>
+              <Button variant="ghost" size="icon">
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -166,37 +343,37 @@ export function StaffOrderListPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="px-2.5 py-0.5 rounded-full bg-red-50 text-[#E4002B] border border-red-200 text-xs font-bold flex items-center gap-1">
+            <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs font-bold flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5" /> Staff Operation Console
             </span>
           </div>
-          <h1 className="text-3xl font-black text-neutral-900 tracking-tight">
+          <h1 className="text-3xl font-black text-foreground tracking-tight">
             Order Fulfillment Queue
           </h1>
-          <p className="text-xs text-neutral-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Advance kitchen preparation, dispatch couriers, and track order completion in real-time.
           </p>
         </div>
 
-        <button
-          type="button"
+        <Button
+          variant="outline"
           onClick={loadOrders}
           disabled={loading}
-          className="self-start sm:self-auto flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white hover:bg-neutral-50 text-neutral-700 text-xs font-bold border border-neutral-300 transition cursor-pointer shadow-xs"
+          className="self-start sm:self-auto gap-2"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>Refresh Queue</span>
-        </button>
+        </Button>
       </div>
 
       {/* Filter Controls */}
-      <div className="bg-white border border-neutral-200 rounded-2xl p-4 flex flex-wrap items-center gap-4 shadow-xs">
+      <div className="bg-card border border-border rounded-3xl p-4 sm:p-5 flex flex-wrap items-center gap-4 shadow-xs">
         <div className="flex items-center gap-2">
-          <label className="text-xs font-bold text-neutral-700 uppercase tracking-wide">Branch:</label>
+          <label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Branch:</label>
           <select
             value={selectedBranch}
             onChange={(e) => setSelectedBranch(e.target.value)}
-            className="bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-1.5 text-xs text-neutral-900 font-semibold focus:outline-none focus:border-[#E4002B]"
+            className="bg-background border border-input rounded-xl px-3 py-1.5 text-xs text-foreground font-semibold focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="all">All Branches</option>
             {MOCK_BRANCHES.map((b) => (
@@ -208,11 +385,11 @@ export function StaffOrderListPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="text-xs font-bold text-neutral-700 uppercase tracking-wide">Status:</label>
+          <label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Status:</label>
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-1.5 text-xs text-neutral-900 font-semibold focus:outline-none focus:border-[#E4002B]"
+            className="bg-background border border-input rounded-xl px-3 py-1.5 text-xs text-foreground font-semibold focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="all">All Statuses</option>
             <option value="PLACED">PLACED</option>
@@ -227,141 +404,28 @@ export function StaffOrderListPage() {
           </select>
         </div>
 
-        <div className="ml-auto text-xs text-neutral-500 font-bold">
+        <div className="ml-auto text-xs text-muted-foreground font-bold">
           Showing {orders.length} order{orders.length === 1 ? '' : 's'}
         </div>
       </div>
 
-      {message && (
-        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center gap-2 text-xs text-emerald-800 font-semibold">
-          <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-600" />
-          <span>{message}</span>
-        </div>
-      )}
-
-      {error && (
-        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-xs text-rose-700 font-semibold">
-          <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-600" />
-          <span>{error}</span>
-        </div>
-      )}
-
       {loading ? (
         <div className="py-24 text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-[#E4002B] mx-auto mb-3" />
-          <p className="text-neutral-500 text-sm font-medium">Loading fulfillment orders...</p>
-        </div>
-      ) : orders.length === 0 ? (
-        <div className="bg-white border border-neutral-200 rounded-3xl p-12 text-center max-w-md mx-auto text-neutral-500 text-sm shadow-xs">
-          No orders found matching the filter criteria.
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
+          <p className="text-muted-foreground text-sm font-medium">Loading fulfillment orders...</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {orders.map((order) => {
-            const nextAction = getNextAction(order)
-            const secondaryAction = getSecondaryAction(order)
-            const isUpdating = updatingId === order.id
-
-            return (
-              <div
-                key={order.id}
-                className="bg-white border border-neutral-200 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-red-200 hover:shadow-md transition duration-150"
-              >
-                <div>
-                  <div className="flex flex-wrap items-center gap-2.5 mb-2.5">
-                    <span className="text-lg font-black text-neutral-900">Order #{order.id}</span>
-                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold border ${getStatusPill(order.status)}`}>
-                      {order.status}
-                    </span>
-                    <span className="text-xs px-2.5 py-0.5 rounded-md bg-neutral-100 text-neutral-700 font-bold uppercase">
-                      {order.fulfillmentType}
-                    </span>
-                    <span className="text-xs px-2.5 py-0.5 rounded-md bg-neutral-100 text-neutral-600 font-semibold">
-                      Payment: {order.paymentStatus}
-                    </span>
-                  </div>
-
-                  <div className="text-xs text-neutral-600 space-y-1">
-                    <p className="flex items-center gap-1.5 font-medium">
-                      <Store className="w-3.5 h-3.5 text-neutral-400" />
-                      <span>Branch #{order.branchId}</span>
-                      <span>•</span>
-                      <User className="w-3.5 h-3.5 text-neutral-400" />
-                      <span>{order.contactName || (order.customerId ? `User #${order.customerId}` : order.guestName)}</span>
-                      {order.contactPhone && (
-                        <span className="inline-flex items-center gap-1 text-neutral-500 ml-2">
-                          <Phone className="w-3 h-3 text-[#E4002B]" /> {order.contactPhone}
-                        </span>
-                      )}
-                    </p>
-                    {order.deliveryAddress && (
-                      <p className="flex items-center gap-1.5 text-neutral-500">
-                        <MapPin className="w-3.5 h-3.5 text-[#E4002B] shrink-0" />
-                        <span>{order.deliveryAddress}</span>
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {order.items.map((i) => (
-                      <span
-                        key={i.id}
-                        className="px-2.5 py-1 bg-neutral-100 rounded-lg text-xs font-semibold text-neutral-800 border border-neutral-200"
-                      >
-                        {i.itemNameSnapshot} × {i.quantity}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 self-end md:self-auto shrink-0">
-                  <div className="text-right mr-2">
-                    <span className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider block">Total</span>
-                    <span className="text-lg font-black text-[#E4002B]">
-                      Rs. {order.grandTotal.toFixed(2)}
-                    </span>
-                  </div>
-
-                  {nextAction && canAdvanceStatus(order, nextAction.nextStatus) ? (
-                    <button
-                      type="button"
-                      disabled={isUpdating}
-                      onClick={() => handleAdvanceStatus(order.id, nextAction.nextStatus)}
-                      className="px-4 py-2.5 rounded-xl bg-[#E4002B] hover:bg-[#C40024] text-white font-extrabold text-xs shadow-md shadow-red-600/20 flex items-center gap-1.5 transition cursor-pointer active:scale-95 disabled:opacity-50"
-                    >
-                      {isUpdating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                      <span>{nextAction.label}</span>
-                      <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
-                    </button>
-                  ) : nextAction && !canAdvanceStatus(order, nextAction.nextStatus) ? (
-                    <span className="text-[11px] px-2.5 py-1 rounded-lg bg-neutral-100 text-neutral-500 font-bold border border-neutral-200">
-                      {user?.role === 'DELIVERY_PARTNER' ? 'Kitchen Action' : 'Role Restricted'}
-                    </span>
-                  ) : null}
-
-                  {secondaryAction && canAdvanceStatus(order, secondaryAction.nextStatus) && (
-                    <button
-                      type="button"
-                      disabled={isUpdating}
-                      onClick={() => handleAdvanceStatus(order.id, secondaryAction.nextStatus)}
-                      className="px-3.5 py-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 font-bold text-xs border border-neutral-300 flex items-center gap-1.5 transition cursor-pointer active:scale-95 disabled:opacity-50"
-                    >
-                      <span>{secondaryAction.label}</span>
-                    </button>
-                  )}
-
-                  <Link
-                    to={`/order/${order.id}`}
-                    className="p-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 transition cursor-pointer"
-                    title="View Customer Tracking View"
-                  >
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        <ResponsiveDataView
+          data={orders}
+          columns={columns}
+          renderCard={renderCard}
+          keyExtractor={(order) => order.id}
+          emptyState={
+            <div className="bg-card border border-border rounded-3xl p-12 text-center max-w-md mx-auto text-muted-foreground text-sm shadow-xs">
+              No orders found matching the filter criteria.
+            </div>
+          }
+        />
       )}
     </div>
   )

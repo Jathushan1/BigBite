@@ -1,23 +1,145 @@
-@import "tailwindcss";
+/* ============================================================
+   BigBite theme variables — src/index.css (or globals.css)
+   Edit values here only. Never hardcode a color in a component.
+   ============================================================ */
 
-@theme {
-  --color-brand-red: #E4002B;
-  --color-brand-red-dark: #C40024;
-  --color-brand-red-light: #FF2B4F;
-  --color-brand-red-hover: #D00027;
-}
+@import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
 
 :root {
-  --brand-red: #E4002B;
-  --brand-red-dark: #C40024;
-  --brand-red-light: #FF2B4F;
+  /* ---- Brand (same in both themes — red already reads fine on dark) ---- */
+  --primary: #E4002B;            /* Brand Red — the one to change live for the demo */
+  --primary-foreground: #FFFFFF; /* text/icons on top of --primary */
+  --primary-hover: #D00027;      /* hover state on brand-colored elements */
+  --primary-active: #C40024;     /* pressed state */
+  --accent: #FF2B4F;             /* Brand Red Light — gradients, soft badges */
+  --accent-foreground: #FFFFFF;
+
+  /* ---- Surfaces (light) ---- */
+  --background: #F8F9FA;         /* page background */
+  --foreground: #18181B;         /* body text on --background */
+  --card: #FFFFFF;               /* card/panel surface */
+  --card-foreground: #18181B;
+  --popover: #FFFFFF;            /* dropdowns, dialogs, toasts */
+  --popover-foreground: #18181B;
+
+  /* ---- Secondary / muted (light) ---- */
+  --secondary: #F4F4F5;          /* secondary buttons, subtle fills */
+  --secondary-foreground: #18181B;
+  --muted: #F4F4F5;              /* disabled/quiet backgrounds */
+  --muted-foreground: #71717A;   /* Text Secondary — subtitles, timestamps */
+
+  /* ---- Structural (light) ---- */
+  --border: rgba(229, 231, 235, 0.8);
+  --input: rgba(229, 231, 235, 0.8);
+  --ring: #FF2B4F;               /* focus ring — brand-tinted, not default blue */
+  --radius: 0.75rem;             /* base radius; cards use rounded-3xl explicitly */
+
+  /* ---- Destructive (cancel / error actions — kept distinct from brand red) ---- */
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+
+  /* ---- Order-status badges (BigBite-specific, same pattern as above) ---- */
+  --status-placed: #71717A;
+  --status-confirmed: #2563EB;
+  --status-preparing: #D97706;
+  --status-out-for-delivery: #7C3AED;
+  --status-ready: #0891B2;
+  --status-completed: #16A34A;
+  --status-cancelled: #71717A;
+  --status-refund-pending: #DC2626;
+
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  color-scheme: light;
 }
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  background-color: #F8F9FA;
-  color: #18181B;
+.dark {
+  --background: #0B0B0E;
+  --foreground: #F4F4F5;
+  --card: #17171B;
+  --card-foreground: #F4F4F5;
+  --popover: #17171B;
+  --popover-foreground: #F4F4F5;
+
+  --secondary: #232327;
+  --secondary-foreground: #F4F4F5;
+  --muted: #232327;
+  --muted-foreground: #A1A1AA;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.12);
+  /* --primary / --accent / --ring intentionally unchanged — brand red keeps
+     enough contrast on dark surfaces; only override below if a designer
+     later decides otherwise */
+
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+
+  /* Status colors on dark — lifted slightly for contrast on #0B0B0E */
+  --status-placed: #A1A1AA;
+  --status-confirmed: #60A5FA;
+  --status-preparing: #FBBF24;
+  --status-out-for-delivery: #A78BFA;
+  --status-ready: #22D3EE;
+  --status-completed: #4ADE80;
+  --status-cancelled: #A1A1AA;
+  --status-refund-pending: #F87171;
+}
+
+/* Publish every variable above into Tailwind's utility namespace.
+   This is what makes bg-primary, text-foreground, border-border, etc. exist. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius: var(--radius);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-status-placed: var(--status-placed);
+  --color-status-confirmed: var(--status-confirmed);
+  --color-status-preparing: var(--status-preparing);
+  --color-status-out-for-delivery: var(--status-out-for-delivery);
+  --color-status-ready: var(--status-ready);
+  --color-status-completed: var(--status-completed);
+  --color-status-cancelled: var(--status-cancelled);
+  --color-status-refund-pending: var(--status-refund-pending);
+
+  /* Backwards compatibility aliases */
+  --color-brand-red: var(--primary);
+  --color-brand-red-dark: var(--primary-active);
+  --color-brand-red-light: var(--accent);
+  --color-brand-red-hover: var(--primary-hover);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    margin: 0;
+    min-height: 100vh;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
 }

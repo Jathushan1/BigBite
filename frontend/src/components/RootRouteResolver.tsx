@@ -8,10 +8,10 @@ export const RootRouteResolver: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="animate-spin rounded-full h-10 w-10 border-4 border-neutral-200 border-t-[#E4002B]"></div>
-          <span className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Loading BigBite...</span>
+          <div className="animate-spin rounded-full h-10 w-10 border-4 border-border border-t-primary"></div>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Loading BigBite...</span>
         </div>
       </div>
     )

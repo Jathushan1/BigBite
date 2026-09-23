@@ -14,6 +14,10 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { getOrder, submitPayment, createPaymentIntent } from '../api/orderApi'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { toast } from '@/components/ui/sonner'
+import { cn } from '@/lib/utils'
 import type { OrderResponse, PaymentMethod } from '../types/order'
 
 const COD_MAX_LIMIT = 3000
@@ -46,15 +50,12 @@ export function PaymentPage() {
         const data = await getOrder(numericOrderId)
         setOrder(data)
 
-        // If order total exceeds 3000, force CARD_STRIPE
         if (data.grandTotal > COD_MAX_LIMIT) {
           setSelectedMethod('CARD_STRIPE')
         } else {
-          // Default to COD if eligible or stay on card
           setSelectedMethod('CASH_ON_DELIVERY')
         }
 
-        // Set cardholder name default
         if (data.contactName) {
           setCardName(data.contactName)
         }
@@ -73,6 +74,7 @@ export function PaymentPage() {
     if (!order) return
     if (order.grandTotal > COD_MAX_LIMIT) {
       setError(`Cash on Delivery is only available for orders up to Rs. ${COD_MAX_LIMIT.toLocaleString()}. Please pay by card.`)
+      toast.error('Order exceeds Cash on Delivery limit.')
       return
     }
 
@@ -86,9 +88,12 @@ export function PaymentPage() {
         success: true,
       })
       setOrder(updated)
+      toast.success('Cash on delivery confirmed!')
       navigate(`/order/${numericOrderId}`)
     } catch (err: any) {
-      setError(err.message || 'Failed to confirm Cash on Delivery')
+      const msg = err.message || 'Failed to confirm Cash on Delivery'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setSubmitting(false)
     }
@@ -103,10 +108,8 @@ export function PaymentPage() {
       setError(null)
       setPaymentFailedNotice(false)
 
-      // 1. Fetch or create PaymentIntent from backend
       const intent = await createPaymentIntent(numericOrderId)
 
-      // 2. Complete payment verification with backend
       const updated = await submitPayment(numericOrderId, {
         paymentMethod: 'CARD_STRIPE',
         stripePaymentIntentId: intent.clientSecret,
@@ -116,12 +119,16 @@ export function PaymentPage() {
       setOrder(updated)
 
       if (!simulateFailure) {
+        toast.success('Card payment verified successfully!')
         navigate(`/order/${numericOrderId}`)
       } else {
+        toast.error('Card payment failed / declined.')
         setPaymentFailedNotice(true)
       }
     } catch (err: any) {
-      setError(err.message || 'Stripe card payment failed')
+      const msg = err.message || 'Stripe card payment failed'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setSubmitting(false)
     }
@@ -130,8 +137,8 @@ export function PaymentPage() {
   if (loading) {
     return (
       <div className="max-w-md mx-auto px-4 py-24 text-center">
-        <Loader2 className="w-8 h-8 animate-spin text-[#E4002B] mx-auto mb-3" />
-        <p className="text-neutral-500 text-sm font-medium">Preparing payment checkout...</p>
+        <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
+        <p className="text-muted-foreground text-sm font-medium">Preparing payment checkout...</p>
       </div>
     )
   }
@@ -139,15 +146,14 @@ export function PaymentPage() {
   if (error && !order) {
     return (
       <div className="max-w-md mx-auto px-4 py-20 text-center">
-        <div className="p-5 rounded-2xl bg-red-50 border border-red-200 text-red-700 mb-6">
+        <div className="p-5 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive mb-6">
           <p className="font-bold">Error loading order</p>
           <p className="text-sm mt-1">{error}</p>
         </div>
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#E4002B] hover:bg-[#C40024] text-white font-bold text-sm shadow-md transition"
-        >
-          <ArrowLeft className="w-4 h-4" /> Go to Home
+        <Link to="/">
+          <Button className="gap-2">
+            <ArrowLeft className="w-4 h-4" /> Go to Home
+          </Button>
         </Link>
       </div>
     )
@@ -156,35 +162,35 @@ export function PaymentPage() {
   const isCodAllowed = (order?.grandTotal ?? 0) <= COD_MAX_LIMIT
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
-      <div className="bg-white border border-neutral-200 rounded-3xl p-6 sm:p-8 shadow-xl">
-        {/* Breadcrumb / Back Link */}
-        <Link
-          to={`/order/${numericOrderId}`}
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-500 hover:text-[#E4002B] transition mb-4 cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back to Order Tracking
-        </Link>
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      {/* Breadcrumb / Back Link */}
+      <Link
+        to={`/order/${numericOrderId}`}
+        className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-primary transition-colors mb-4 cursor-pointer"
+      >
+        <ArrowLeft className="w-4 h-4" /> Back to Order Tracking
+      </Link>
 
+      <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 pb-6 border-b border-neutral-100 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-6 border-b border-border">
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-[#E4002B]">
+            <span className="text-xs font-bold uppercase tracking-wider text-primary">
               Step 2 of 2 • Secure Payment
             </span>
-            <h1 className="text-2xl sm:text-3xl font-black text-neutral-900 tracking-tight mt-1">
+            <h1 className="text-2xl sm:text-3xl font-black text-foreground tracking-tight mt-1">
               Select Payment Method
             </h1>
-            <p className="text-xs sm:text-sm text-neutral-500 mt-1">
-              Confirm how you would like to pay for Order #{order?.id}.
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+              Confirm payment for Order #{order?.id}
             </p>
           </div>
 
-          <div className="text-right">
-            <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider block">
+          <div className="sm:text-right">
+            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
               Total Amount
             </span>
-            <span className="text-2xl font-black text-[#E4002B]">
+            <span className="text-2xl sm:text-3xl font-black text-primary">
               Rs. {order?.grandTotal?.toFixed(2)}
             </span>
           </div>
@@ -192,124 +198,131 @@ export function PaymentPage() {
 
         {/* Global Error Banner */}
         {error && (
-          <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold flex items-start gap-2.5 mb-6">
-            <ShieldAlert className="w-4 h-4 text-[#E4002B] shrink-0 mt-0.5" />
+          <div className="p-4 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-bold flex items-start gap-2.5">
+            <ShieldAlert className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
         )}
 
         {/* Payment Failed Notice (Retry Banner) */}
         {paymentFailedNotice && (
-          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs mb-6 flex items-start gap-2.5 animate-in fade-in duration-200">
-            <XCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+          <div className="p-4 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
+            <XCircle className="w-5 h-5 shrink-0 mt-0.5" />
             <div>
               <p className="font-bold text-sm">Payment Failed / Declined</p>
-              <p className="mt-0.5 text-rose-600">
+              <p className="mt-0.5 text-destructive/90">
                 The card transaction was simulated as declined. Your order remains unpaid in our system. You can adjust details and retry below without placing a new order.
               </p>
             </div>
           </div>
         )}
 
-        {/* Method Switcher Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-          {/* Card Option: Cash on Delivery */}
-          <div
-            onClick={() => {
-              if (isCodAllowed) setSelectedMethod('CASH_ON_DELIVERY')
-            }}
-            className={`rounded-2xl p-5 border-2 transition relative flex flex-col justify-between ${
-              !isCodAllowed
-                ? 'border-neutral-200 bg-neutral-50 opacity-60 cursor-not-allowed'
-                : selectedMethod === 'CASH_ON_DELIVERY'
-                ? 'border-[#E4002B] bg-red-50/40 shadow-sm cursor-pointer'
-                : 'border-neutral-200 hover:border-neutral-300 bg-white cursor-pointer'
-            }`}
-          >
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
-                  <Banknote className="w-5 h-5" />
-                </div>
-                {selectedMethod === 'CASH_ON_DELIVERY' && isCodAllowed && (
-                  <span className="w-5 h-5 rounded-full bg-[#E4002B] text-white flex items-center justify-center">
-                    <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />
-                  </span>
-                )}
-              </div>
-              <h3 className="text-base font-black text-neutral-900">Cash on Delivery (COD)</h3>
-              <p className="text-xs text-neutral-500 mt-1 leading-relaxed">
-                Pay in cash directly upon physical delivery or when picking up at the branch counter.
-              </p>
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-neutral-200/70">
-              {isCodAllowed ? (
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Available (Under Rs. 3,000)
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md">
-                  <AlertTriangle className="w-3 h-3 text-rose-600" /> Exceeds Rs. 3,000 Limit
-                </span>
+        {/* Large Tap Cards for Payment Method Picker (§3, §6) */}
+        <div className="space-y-3">
+          <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider">
+            Choose Payment Method
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Card Option: Cash on Delivery */}
+            <div
+              onClick={() => {
+                if (isCodAllowed) setSelectedMethod('CASH_ON_DELIVERY')
+              }}
+              className={cn(
+                'rounded-2xl p-5 border-2 transition relative flex flex-col justify-between min-h-[140px]',
+                !isCodAllowed
+                  ? 'border-border bg-muted/40 opacity-60 cursor-not-allowed'
+                  : selectedMethod === 'CASH_ON_DELIVERY'
+                  ? 'border-primary bg-primary/10 shadow-sm cursor-pointer ring-2 ring-primary/20'
+                  : 'border-border hover:border-muted-foreground/30 bg-card cursor-pointer'
               )}
-            </div>
-          </div>
-
-          {/* Card Option: Stripe Card Payment */}
-          <div
-            onClick={() => setSelectedMethod('CARD_STRIPE')}
-            className={`rounded-2xl p-5 border-2 transition relative flex flex-col justify-between cursor-pointer ${
-              selectedMethod === 'CARD_STRIPE'
-                ? 'border-[#E4002B] bg-red-50/40 shadow-sm'
-                : 'border-neutral-200 hover:border-neutral-300 bg-white'
-            }`}
-          >
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 rounded-xl bg-red-50 text-[#E4002B] flex items-center justify-center font-bold">
-                  <CreditCard className="w-5 h-5 stroke-[2.2]" />
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                    <Banknote className="w-5 h-5" />
+                  </div>
+                  {selectedMethod === 'CASH_ON_DELIVERY' && isCodAllowed && (
+                    <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                      <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />
+                    </span>
+                  )}
                 </div>
-                {selectedMethod === 'CARD_STRIPE' && (
-                  <span className="w-5 h-5 rounded-full bg-[#E4002B] text-white flex items-center justify-center">
-                    <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />
+                <h3 className="text-base font-black text-foreground">Cash on Delivery (COD)</h3>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  Pay upon physical handover or counter pickup.
+                </p>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-border">
+                {isCodAllowed ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                    <CheckCircle2 className="w-3 h-3" /> Under Rs. 3,000 Limit
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-destructive bg-destructive/10 px-2 py-0.5 rounded-md">
+                    <AlertTriangle className="w-3 h-3" /> Exceeds Rs. 3,000 Limit
                   </span>
                 )}
               </div>
-              <h3 className="text-base font-black text-neutral-900">Credit / Debit Card (Stripe)</h3>
-              <p className="text-xs text-neutral-500 mt-1 leading-relaxed">
-                Instant payment authorization powered by Stripe Test Gateway. Visa, Mastercard accepted.
-              </p>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-neutral-200/70 flex items-center gap-1.5">
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#E4002B] bg-red-50 px-2 py-0.5 rounded-md">
-                <ShieldCheck className="w-3 h-3" /> Stripe Sandbox Mode
-              </span>
+            {/* Card Option: Stripe Card Payment */}
+            <div
+              onClick={() => setSelectedMethod('CARD_STRIPE')}
+              className={cn(
+                'rounded-2xl p-5 border-2 transition relative flex flex-col justify-between min-h-[140px] cursor-pointer',
+                selectedMethod === 'CARD_STRIPE'
+                  ? 'border-primary bg-primary/10 shadow-sm ring-2 ring-primary/20'
+                  : 'border-border hover:border-muted-foreground/30 bg-card'
+              )}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+                    <CreditCard className="w-5 h-5 stroke-[2.2]" />
+                  </div>
+                  {selectedMethod === 'CARD_STRIPE' && (
+                    <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                      <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-base font-black text-foreground">Credit / Debit Card (Stripe)</h3>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  Instant authorization powered by Stripe Test Gateway.
+                </p>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-border flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                  <ShieldCheck className="w-3 h-3" /> Stripe Sandbox Mode
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Tab 1 Body: Cash on Delivery Confirmation */}
         {selectedMethod === 'CASH_ON_DELIVERY' && (
-          <div className="bg-neutral-50 border border-neutral-200 rounded-2xl p-6 space-y-4 animate-in fade-in duration-150">
+          <div className="bg-secondary/70 border border-border rounded-2xl p-6 space-y-4 animate-in fade-in duration-150">
             <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 mt-0.5">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
                 <Banknote className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-neutral-900">Pay on Handover</h4>
-                <p className="text-xs text-neutral-600 mt-0.5">
-                  Please keep the exact cash amount of <strong>Rs. {order?.grandTotal?.toFixed(2)}</strong> ready. Our rider or staff will issue a physical receipt upon payment.
+                <h4 className="text-sm font-bold text-foreground">Pay on Handover</h4>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Please keep exact cash of <strong>Rs. {order?.grandTotal?.toFixed(2)}</strong> ready. Our rider or staff will issue a physical receipt upon payment.
                 </p>
               </div>
             </div>
 
-            <button
+            <Button
               type="button"
               disabled={submitting || !isCodAllowed}
               onClick={handleConfirmCod}
-              className="w-full py-3.5 px-4 rounded-xl bg-[#E4002B] hover:bg-[#C40024] text-white font-extrabold text-sm transition shadow-lg shadow-red-600/20 active:scale-98 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full h-12 text-sm font-bold shadow-lg shadow-primary/20 gap-2"
             >
               {submitting ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -317,17 +330,17 @@ export function PaymentPage() {
                 <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
               )}
               <span>Confirm Order with Cash on Delivery (Rs. {order?.grandTotal?.toFixed(2)})</span>
-            </button>
+            </Button>
           </div>
         )}
 
         {/* Tab 2 Body: Stripe Card Gateway */}
         {selectedMethod === 'CARD_STRIPE' && (
           <form onSubmit={handleStripeCardPayment} className="space-y-4 animate-in fade-in duration-150">
-            <div className="bg-neutral-50 border border-neutral-200 rounded-2xl p-5 space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-neutral-200">
-                <div className="flex items-center gap-2 text-xs font-bold text-neutral-700">
-                  <Lock className="w-3.5 h-3.5 text-[#E4002B]" />
+            <div className="bg-secondary/70 border border-border rounded-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-border">
+                <div className="flex items-center gap-2 text-xs font-bold text-foreground">
+                  <Lock className="w-3.5 h-3.5 text-primary" />
                   <span>Stripe 256-bit Encrypted Checkout</span>
                 </div>
                 <button
@@ -337,92 +350,91 @@ export function PaymentPage() {
                     setCardExpiry('12/28')
                     setCardCvc('123')
                   }}
-                  className="text-[11px] font-bold text-[#E4002B] hover:underline flex items-center gap-1 cursor-pointer"
+                  className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
                 >
-                  <Sparkles className="w-3 h-3" /> Auto-fill Stripe Test Card
+                  <Sparkles className="w-3 h-3" /> Auto-fill Test Card
                 </button>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-neutral-700 uppercase tracking-wider mb-1">
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                   Cardholder Name
                 </label>
-                <input
+                <Input
                   type="text"
                   required
                   value={cardName}
                   onChange={(e) => setCardName(e.target.value)}
                   placeholder="e.g. Alice Johnson"
-                  className="w-full px-3.5 py-2 rounded-xl bg-white border border-neutral-300 text-neutral-900 text-sm focus:outline-none focus:border-[#E4002B] transition"
                 />
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-neutral-700 uppercase tracking-wider mb-1">
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                   Card Number
                 </label>
                 <div className="relative">
-                  <input
+                  <Input
                     type="text"
                     required
                     value={cardNumber}
                     onChange={(e) => setCardNumber(e.target.value)}
                     placeholder="4242 4242 4242 4242"
-                    className="w-full pl-3.5 pr-10 py-2 rounded-xl bg-white border border-neutral-300 text-neutral-900 text-sm font-mono focus:outline-none focus:border-[#E4002B] transition"
+                    className="font-mono pr-10"
                   />
-                  <CreditCard className="w-4 h-4 text-neutral-400 absolute right-3 top-2.5" />
+                  <CreditCard className="w-4 h-4 text-muted-foreground absolute right-3.5 top-3.5" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-neutral-700 uppercase tracking-wider mb-1">
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                     Expiry (MM/YY)
                   </label>
-                  <input
+                  <Input
                     type="text"
                     required
                     value={cardExpiry}
                     onChange={(e) => setCardExpiry(e.target.value)}
                     placeholder="MM/YY"
-                    className="w-full px-3.5 py-2 rounded-xl bg-white border border-neutral-300 text-neutral-900 text-sm font-mono focus:outline-none focus:border-[#E4002B] transition"
+                    className="font-mono"
                   />
                 </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-neutral-700 uppercase tracking-wider mb-1">
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                     CVC / CVV
                   </label>
-                  <input
+                  <Input
                     type="text"
                     required
                     maxLength={4}
                     value={cardCvc}
                     onChange={(e) => setCardCvc(e.target.value)}
                     placeholder="123"
-                    className="w-full px-3.5 py-2 rounded-xl bg-white border border-neutral-300 text-neutral-900 text-sm font-mono focus:outline-none focus:border-[#E4002B] transition"
+                    className="font-mono"
                   />
                 </div>
               </div>
 
-              {/* Simulation failure toggle for testing */}
-              <div className="pt-2 border-t border-neutral-200 flex items-center justify-between">
-                <span className="text-[11px] text-neutral-500">Sandbox Test Simulation Mode:</span>
-                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-600 cursor-pointer">
+              {/* Simulation failure toggle */}
+              <div className="pt-2 border-t border-border flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground">Sandbox Simulation Mode:</span>
+                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground cursor-pointer">
                   <input
                     type="checkbox"
                     checked={simulateFailure}
                     onChange={(e) => setSimulateFailure(e.target.checked)}
-                    className="rounded border-neutral-300 text-[#E4002B] focus:ring-red-100"
+                    className="rounded border-input text-primary accent-primary focus:ring-ring"
                   />
-                  <span>Simulate Payment Decline</span>
+                  <span>Simulate Decline</span>
                 </label>
               </div>
             </div>
 
-            <button
+            <Button
               type="submit"
               disabled={submitting}
-              className="w-full py-3.5 px-4 rounded-xl bg-[#E4002B] hover:bg-[#C40024] text-white font-extrabold text-sm transition shadow-lg shadow-red-600/20 active:scale-98 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full h-12 text-sm font-bold shadow-lg shadow-primary/20 gap-2"
             >
               {submitting ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -430,7 +442,7 @@ export function PaymentPage() {
                 <Lock className="w-4 h-4" />
               )}
               <span>Pay Rs. {order?.grandTotal?.toFixed(2)} with Stripe</span>
-            </button>
+            </Button>
           </form>
         )}
       </div>

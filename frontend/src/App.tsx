@@ -18,14 +18,16 @@ import { OrderStatusPage } from './pages/OrderStatusPage'
 import { OrderHistoryPage } from './pages/OrderHistoryPage'
 import { StaffOrderListPage } from './pages/StaffOrderListPage'
 import { CustomerHome } from './pages/CustomerHome'
+import { Toaster } from './components/ui/sonner'
 
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <CartProvider>
-          <div className="min-h-screen bg-[#F8F9FA] text-neutral-900 flex flex-col font-sans selection:bg-[#E4002B] selection:text-white">
+          <div className="min-h-screen bg-background text-foreground flex flex-col font-sans selection:bg-primary selection:text-primary-foreground">
             <Navbar />
+            <Toaster />
             <main className="flex-1">
               <Routes>
                 {/* Dynamic Root Route based on Auth State */}
