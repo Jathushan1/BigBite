@@ -274,6 +274,9 @@ public class OrderService {
         validateTransition(order, current, newStatus);
 
         order.setStatus(newStatus);
+        if (newStatus == OrderStatus.PAYMENT_VERIFIED) {
+            order.setPaymentStatus(PaymentStatus.VERIFIED);
+        }
         Order updated = orderRepository.save(order);
         return toOrderResponseDto(updated);
     }
@@ -412,7 +415,7 @@ public class OrderService {
             }
             order.setPaymentMethod(PaymentMethod.CASH_ON_DELIVERY);
             order.setPaymentStatus(PaymentStatus.PENDING);
-            order.setStatus(OrderStatus.CONFIRMED);
+            order.setStatus(OrderStatus.PLACED);
         } else {
             order.setPaymentMethod(PaymentMethod.CARD_STRIPE);
             if (request != null && request.getStripePaymentIntentId() != null) {
@@ -452,9 +455,11 @@ public class OrderService {
             throw new IllegalStateException("Order is in terminal status " + current + " and cannot be transitioned");
         }
 
+        boolean isCod = order.getPaymentMethod() == PaymentMethod.CASH_ON_DELIVERY;
+
         boolean isValid = switch (current) {
-            case PLACED -> next == OrderStatus.PAYMENT_VERIFIED || next == OrderStatus.CONFIRMED;
-            case PAYMENT_VERIFIED -> next == OrderStatus.CONFIRMED;
+            case PLACED -> isCod ? (next == OrderStatus.CONFIRMED) : (next == OrderStatus.PAYMENT_VERIFIED || next == OrderStatus.CONFIRMED);
+            case PAYMENT_VERIFIED -> isCod ? (next == OrderStatus.COMPLETED) : (next == OrderStatus.CONFIRMED || next == OrderStatus.COMPLETED);
             case CONFIRMED -> next == OrderStatus.PREPARING;
             case PREPARING -> {
                 if (order.getFulfillmentType() == FulfillmentType.DELIVERY) {
@@ -463,8 +468,14 @@ public class OrderService {
                     yield next == OrderStatus.READY_FOR_PICKUP;
                 }
             }
-            case OUT_FOR_DELIVERY -> next == OrderStatus.DELIVERED || next == OrderStatus.COMPLETED;
-            case DELIVERED, READY_FOR_PICKUP -> next == OrderStatus.COMPLETED;
+            case OUT_FOR_DELIVERY -> next == OrderStatus.DELIVERED || (!isCod && next == OrderStatus.COMPLETED);
+            case DELIVERED, READY_FOR_PICKUP -> {
+                if (isCod && order.getPaymentStatus() != PaymentStatus.VERIFIED) {
+                    yield next == OrderStatus.PAYMENT_VERIFIED;
+                } else {
+                    yield next == OrderStatus.COMPLETED || (isCod && next == OrderStatus.PAYMENT_VERIFIED);
+                }
+            }
             default -> false;
         };
 

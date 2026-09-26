@@ -89,11 +89,16 @@ export function StaffOrderListPage() {
   }
 
   const getNextAction = (order: OrderResponse): { label: string; nextStatus: OrderStatus } | null => {
+    const isCod = order.paymentMethod === 'CASH_ON_DELIVERY'
     switch (order.status) {
       case 'PLACED':
-        return { label: 'Approve & Confirm', nextStatus: 'CONFIRMED' }
+        return isCod
+          ? { label: 'Approve COD & Confirm', nextStatus: 'CONFIRMED' }
+          : { label: 'Approve & Confirm', nextStatus: 'CONFIRMED' }
       case 'PAYMENT_VERIFIED':
-        return { label: 'Confirm Order', nextStatus: 'CONFIRMED' }
+        return isCod
+          ? { label: 'Complete Order', nextStatus: 'COMPLETED' }
+          : { label: 'Confirm Order', nextStatus: 'CONFIRMED' }
       case 'CONFIRMED':
         return { label: 'Start Preparing', nextStatus: 'PREPARING' }
       case 'PREPARING':
@@ -104,6 +109,9 @@ export function StaffOrderListPage() {
         return { label: 'Mark Delivered', nextStatus: 'DELIVERED' }
       case 'DELIVERED':
       case 'READY_FOR_PICKUP':
+        if (isCod && order.paymentStatus !== 'VERIFIED') {
+          return { label: 'Collect Cash & Verify', nextStatus: 'PAYMENT_VERIFIED' }
+        }
         return { label: 'Complete Order', nextStatus: 'COMPLETED' }
       default:
         return null
@@ -117,7 +125,9 @@ export function StaffOrderListPage() {
           ? { label: 'Ready for Pickup', nextStatus: 'READY_FOR_PICKUP' }
           : null
       case 'OUT_FOR_DELIVERY':
-        return { label: 'Direct Complete', nextStatus: 'COMPLETED' }
+        return order.paymentMethod !== 'CASH_ON_DELIVERY'
+          ? { label: 'Direct Complete', nextStatus: 'COMPLETED' }
+          : null
       default:
         return null
     }
@@ -131,11 +141,17 @@ export function StaffOrderListPage() {
     if (user.role === 'BRANCH_MANAGER') {
       if (user.branchId && user.branchId !== order.branchId) return false
       if (nextStatus === 'DELIVERED' && order.fulfillmentType === 'DELIVERY') return false
+      if (nextStatus === 'PAYMENT_VERIFIED' && order.fulfillmentType === 'DELIVERY') return false
       return true
     }
 
     if (user.role === 'DELIVERY_PARTNER') {
-      return nextStatus === 'DELIVERED' || nextStatus === 'COMPLETED'
+      return (
+        nextStatus === 'OUT_FOR_DELIVERY' ||
+        nextStatus === 'DELIVERED' ||
+        nextStatus === 'PAYMENT_VERIFIED' ||
+        nextStatus === 'COMPLETED'
+      )
     }
 
     return false

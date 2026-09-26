@@ -351,7 +351,8 @@ class OrderServiceTest {
         PaymentRequestDto codReq = new PaymentRequestDto(PaymentMethod.CASH_ON_DELIVERY, true);
         OrderResponseDto response = orderService.recordPayment(20L, codReq);
 
-        assertEquals(OrderStatus.CONFIRMED, response.getStatus());
+        assertEquals(OrderStatus.PLACED, response.getStatus());
+        assertEquals(PaymentStatus.PENDING, response.getPaymentStatus());
         assertEquals(PaymentMethod.CASH_ON_DELIVERY, response.getPaymentMethod());
 
         // Order over 3000
@@ -364,6 +365,54 @@ class OrderServiceTest {
         when(orderRepository.findById(21L)).thenReturn(Optional.of(orderOver));
 
         assertThrows(IllegalArgumentException.class, () -> orderService.recordPayment(21L, codReq));
+    }
+
+    @Test
+    @DisplayName("Cash on delivery complete lifecycle: PLACED -> CONFIRMED -> PREPARING -> OUT_FOR_DELIVERY -> DELIVERED -> PAYMENT_VERIFIED -> COMPLETED")
+    void testCodOrderLifecycleWorkflow() {
+        Order codOrder = new Order();
+        codOrder.setId(30L);
+        codOrder.setStatus(OrderStatus.PLACED);
+        codOrder.setPaymentMethod(PaymentMethod.CASH_ON_DELIVERY);
+        codOrder.setPaymentStatus(PaymentStatus.PENDING);
+        codOrder.setFulfillmentType(FulfillmentType.DELIVERY);
+        codOrder.setGrandTotal(new BigDecimal("1800.00"));
+
+        when(orderRepository.findById(30L)).thenReturn(Optional.of(codOrder));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // 1. Branch Manager approves COD order: PLACED -> CONFIRMED
+        OrderResponseDto confirmed = orderService.updateOrderStatus(30L, OrderStatus.CONFIRMED);
+        assertEquals(OrderStatus.CONFIRMED, confirmed.getStatus());
+        assertEquals(PaymentStatus.PENDING, confirmed.getPaymentStatus());
+
+        // 2. Kitchen starts preparing: CONFIRMED -> PREPARING
+        OrderResponseDto preparing = orderService.updateOrderStatus(30L, OrderStatus.PREPARING);
+        assertEquals(OrderStatus.PREPARING, preparing.getStatus());
+
+        // 3. Dispatched: PREPARING -> OUT_FOR_DELIVERY
+        OrderResponseDto outForDelivery = orderService.updateOrderStatus(30L, OrderStatus.OUT_FOR_DELIVERY);
+        assertEquals(OrderStatus.OUT_FOR_DELIVERY, outForDelivery.getStatus());
+
+        // 4. Delivery partner arrives: OUT_FOR_DELIVERY -> DELIVERED
+        OrderResponseDto delivered = orderService.updateOrderStatus(30L, OrderStatus.DELIVERED);
+        assertEquals(OrderStatus.DELIVERED, delivered.getStatus());
+        assertEquals(PaymentStatus.PENDING, delivered.getPaymentStatus());
+
+        // 5. Cannot complete directly before verifying payment
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                orderService.updateOrderStatus(30L, OrderStatus.COMPLETED));
+        assertTrue(ex.getMessage().contains("Invalid status transition"));
+
+        // 6. Cash received and verified: DELIVERED -> PAYMENT_VERIFIED
+        OrderResponseDto verified = orderService.updateOrderStatus(30L, OrderStatus.PAYMENT_VERIFIED);
+        assertEquals(OrderStatus.PAYMENT_VERIFIED, verified.getStatus());
+        assertEquals(PaymentStatus.VERIFIED, verified.getPaymentStatus());
+
+        // 7. Delivery partner marks completed: PAYMENT_VERIFIED -> COMPLETED
+        OrderResponseDto completed = orderService.updateOrderStatus(30L, OrderStatus.COMPLETED);
+        assertEquals(OrderStatus.COMPLETED, completed.getStatus());
+        assertEquals(PaymentStatus.VERIFIED, completed.getPaymentStatus());
     }
 
     @Test

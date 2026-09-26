@@ -88,7 +88,7 @@ export function PaymentPage() {
         success: true,
       })
       setOrder(updated)
-      toast.success('Cash on delivery confirmed!')
+      toast.success('Cash on delivery selected — awaiting branch manager approval!')
       navigate(`/order/${numericOrderId}`)
     } catch (err: any) {
       const msg = err.message || 'Failed to confirm Cash on Delivery'
@@ -250,7 +250,7 @@ export function PaymentPage() {
                 </div>
                 <h3 className="text-base font-black text-foreground">Cash on Delivery (COD)</h3>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Pay upon physical handover or counter pickup.
+                  Pay upon handover. Order proceeds after Branch Manager approval.
                 </p>
               </div>
 
@@ -313,7 +313,7 @@ export function PaymentPage() {
               <div>
                 <h4 className="text-sm font-bold text-foreground">Pay on Handover</h4>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Please keep exact cash of <strong>Rs. {order?.grandTotal?.toFixed(2)}</strong> ready. Our rider or staff will issue a physical receipt upon payment.
+                  Please keep exact cash of <strong>Rs. {order?.grandTotal?.toFixed(2)}</strong> ready. Your order requires Branch Manager approval before preparation, and payment will be verified upon delivery.
                 </p>
               </div>
             </div>

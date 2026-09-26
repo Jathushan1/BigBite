@@ -1,31 +1,55 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Bike, MapPin, Package, ArrowRight, RefreshCw, Loader2, CheckCircle } from 'lucide-react'
+import {
+  Bike,
+  MapPin,
+  Package,
+  ArrowRight,
+  RefreshCw,
+  Loader2,
+  CheckCircle,
+  Banknote,
+  Phone,
+  CheckSquare,
+  Square,
+} from 'lucide-react'
 import { getOrders, updateOrderStatus } from '../api/orderApi'
 import type { OrderResponse, OrderStatus } from '../types/order'
 import { ResponsiveDataView, type ColumnDef } from '../components/ResponsiveDataView'
 import { StatusBadge } from '../components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/sonner'
+import { cn } from '@/lib/utils'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 
 export const DeliveryDashboard: React.FC = () => {
   const { user } = useAuth()
   const [orders, setOrders] = useState<OrderResponse[]>([])
   const [loading, setLoading] = useState(false)
   const [updatingId, setUpdatingId] = useState<number | null>(null)
+  const [cashCollectionOrder, setCashCollectionOrder] = useState<OrderResponse | null>(null)
+  const [cashConfirmed, setCashConfirmed] = useState(false)
+  const [submittingCash, setSubmittingCash] = useState(false)
 
   const loadDeliveryOrders = async () => {
     if (!user?.branchId) return
     try {
       setLoading(true)
       const data = await getOrders({ branchId: user.branchId })
-      // Filter for orders ready for pickup or out for delivery
+      // Filter for orders in delivery pipeline: ready, in transit, delivered (cash collect), or payment verified
       setOrders(
         data.filter(
           (o) =>
             o.fulfillmentType === 'DELIVERY' &&
-            ['READY_FOR_PICKUP', 'OUT_FOR_DELIVERY'].includes(o.status)
+            ['READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'PAYMENT_VERIFIED'].includes(o.status)
         )
       )
     } catch (err: any) {
@@ -52,6 +76,52 @@ export const DeliveryDashboard: React.FC = () => {
     }
   }
 
+  const handleActionClick = (order: OrderResponse, nextStatus: OrderStatus) => {
+    if (nextStatus === 'PAYMENT_VERIFIED') {
+      setCashConfirmed(false)
+      setCashCollectionOrder(order)
+    } else {
+      handleAdvanceStatus(order.id, nextStatus)
+    }
+  }
+
+  const handleConfirmCashCollection = async () => {
+    if (!cashCollectionOrder || !cashConfirmed) return
+    try {
+      setSubmittingCash(true)
+      await updateOrderStatus(cashCollectionOrder.id, 'PAYMENT_VERIFIED')
+      toast.success(
+        `Cash payment of Rs. ${cashCollectionOrder.grandTotal.toFixed(2)} for Order #${cashCollectionOrder.id} verified!`
+      )
+      setCashCollectionOrder(null)
+      setCashConfirmed(false)
+      await loadDeliveryOrders()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to verify cash collection')
+    } finally {
+      setSubmittingCash(false)
+    }
+  }
+
+  const getDeliveryAction = (o: OrderResponse): { label: string; nextStatus: OrderStatus } | null => {
+    if (o.status === 'READY_FOR_PICKUP') {
+      return { label: 'Start Delivery', nextStatus: 'OUT_FOR_DELIVERY' }
+    }
+    if (o.status === 'OUT_FOR_DELIVERY') {
+      return { label: 'Mark Delivered', nextStatus: 'DELIVERED' }
+    }
+    if (o.status === 'DELIVERED') {
+      if (o.paymentMethod === 'CASH_ON_DELIVERY' && o.paymentStatus !== 'VERIFIED') {
+        return { label: 'Collect Cash & Verify', nextStatus: 'PAYMENT_VERIFIED' }
+      }
+      return { label: 'Complete Order', nextStatus: 'COMPLETED' }
+    }
+    if (o.status === 'PAYMENT_VERIFIED') {
+      return { label: 'Complete Order', nextStatus: 'COMPLETED' }
+    }
+    return null
+  }
+
   const columns: ColumnDef<OrderResponse>[] = [
     {
       header: 'Order',
@@ -72,6 +142,30 @@ export const DeliveryDashboard: React.FC = () => {
       ),
     },
     {
+      header: 'Payment',
+      cell: (o) => (
+        <span
+          className={cn(
+            'text-[11px] font-bold px-2 py-0.5 rounded-md border inline-flex items-center gap-1',
+            o.paymentMethod === 'CASH_ON_DELIVERY'
+              ? o.paymentStatus === 'VERIFIED'
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+              : 'bg-primary/10 text-primary border-primary/20'
+          )}
+        >
+          {o.paymentMethod === 'CASH_ON_DELIVERY' ? (
+            <>
+              <Banknote className="w-3 h-3" />
+              <span>{o.paymentStatus === 'VERIFIED' ? 'COD Paid' : 'Collect Cash'}</span>
+            </>
+          ) : (
+            <span>Card Paid</span>
+          )}
+        </span>
+      ),
+    },
+    {
       header: 'Status',
       cell: (o) => <StatusBadge status={o.status} />,
     },
@@ -83,13 +177,7 @@ export const DeliveryDashboard: React.FC = () => {
       header: 'Action',
       className: 'text-right',
       cell: (o) => {
-        let action: { label: string; nextStatus: OrderStatus } | null = null
-        if (o.status === 'READY_FOR_PICKUP') {
-          action = { label: 'Start Delivery', nextStatus: 'OUT_FOR_DELIVERY' }
-        } else if (o.status === 'OUT_FOR_DELIVERY') {
-          action = { label: 'Mark Delivered', nextStatus: 'DELIVERED' }
-        }
-
+        const action = getDeliveryAction(o)
         if (!action) return null
         const isUpdating = updatingId === o.id
 
@@ -97,7 +185,7 @@ export const DeliveryDashboard: React.FC = () => {
           <Button
             size="sm"
             disabled={isUpdating}
-            onClick={() => handleAdvanceStatus(o.id, action!.nextStatus)}
+            onClick={() => handleActionClick(o, action.nextStatus)}
             className="text-xs gap-1"
           >
             {isUpdating && <Loader2 className="w-3 h-3 animate-spin" />}
@@ -109,12 +197,7 @@ export const DeliveryDashboard: React.FC = () => {
   ]
 
   const renderCard = (o: OrderResponse) => {
-    let action: { label: string; nextStatus: OrderStatus } | null = null
-    if (o.status === 'READY_FOR_PICKUP') {
-      action = { label: 'Start Delivery', nextStatus: 'OUT_FOR_DELIVERY' }
-    } else if (o.status === 'OUT_FOR_DELIVERY') {
-      action = { label: 'Mark Delivered', nextStatus: 'DELIVERED' }
-    }
+    const action = getDeliveryAction(o)
 
     return (
       <div className="bg-card border border-border rounded-3xl p-5 shadow-xs space-y-3">
@@ -126,16 +209,23 @@ export const DeliveryDashboard: React.FC = () => {
           <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
           <span>{o.deliveryAddress}</span>
         </p>
-        <p className="text-xs text-muted-foreground">
-          {o.contactName || o.guestName} {o.contactPhone ? `• ${o.contactPhone}` : ''}
-        </p>
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>{o.contactName || o.guestName} {o.contactPhone ? `• ${o.contactPhone}` : ''}</span>
+          <span className="font-semibold text-foreground">
+            {o.paymentMethod === 'CASH_ON_DELIVERY'
+              ? o.paymentStatus === 'VERIFIED'
+                ? 'COD Paid'
+                : 'Collect Cash'
+              : 'Paid Online'}
+          </span>
+        </div>
         <div className="flex items-center justify-between pt-2 border-t border-border">
           <span className="text-sm font-black text-primary">Rs. {o.grandTotal.toFixed(2)}</span>
           {action && (
             <Button
               size="sm"
               disabled={updatingId === o.id}
-              onClick={() => handleAdvanceStatus(o.id, action!.nextStatus)}
+              onClick={() => handleActionClick(o, action.nextStatus)}
               className="text-xs"
             >
               {action.label}
@@ -218,8 +308,10 @@ export const DeliveryDashboard: React.FC = () => {
             <h3 className="font-bold text-foreground">Delivery Status Workflow</h3>
             <p className="text-xs text-muted-foreground">
               Advance from <span className="font-bold text-foreground">READY_FOR_PICKUP</span> to{' '}
-              <span className="font-bold text-foreground">OUT_FOR_DELIVERY</span> then{' '}
-              <span className="font-bold text-foreground">DELIVERED</span>.
+              <span className="font-bold text-foreground">OUT_FOR_DELIVERY</span>, then{' '}
+              <span className="font-bold text-foreground">DELIVERED</span>. For COD, verify payment to{' '}
+              <span className="font-bold text-foreground">PAYMENT_VERIFIED</span> before marking{' '}
+              <span className="font-bold text-foreground">COMPLETED</span>.
             </p>
             <Link
               to="/staff/orders"
@@ -258,6 +350,134 @@ export const DeliveryDashboard: React.FC = () => {
             />
           </section>
         )}
+
+        {/* Cash Collection Modal for Delivery Partner */}
+        <Dialog
+          open={!!cashCollectionOrder}
+          onOpenChange={(open) => {
+            if (!open) {
+              setCashCollectionOrder(null)
+              setCashConfirmed(false)
+            }
+          }}
+        >
+          {cashCollectionOrder && (
+            <DialogContent className="max-w-md p-6 sm:p-7 space-y-5">
+              <DialogHeader className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                    <Banknote className="w-3.5 h-3.5" /> Cash on Delivery Collection
+                  </span>
+                  <span className="text-xs font-bold text-muted-foreground">
+                    Order #{cashCollectionOrder.id}
+                  </span>
+                </div>
+                <DialogTitle className="text-xl font-black text-foreground pt-1">
+                  Confirm Cash Collection
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Verify physical cash received from customer before marking this order as paid.
+                </DialogDescription>
+              </DialogHeader>
+
+              {/* Order Info Card */}
+              <div className="rounded-2xl bg-secondary/60 border border-border p-4 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Customer:</span>
+                  <span className="font-bold text-foreground">
+                    {cashCollectionOrder.contactName || cashCollectionOrder.guestName}
+                  </span>
+                </div>
+                {cashCollectionOrder.contactPhone && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Contact Phone:</span>
+                    <a
+                      href={`tel:${cashCollectionOrder.contactPhone}`}
+                      className="font-bold text-primary hover:underline flex items-center gap-1"
+                    >
+                      <Phone className="w-3 h-3" />
+                      {cashCollectionOrder.contactPhone}
+                    </a>
+                  </div>
+                )}
+                <div className="flex items-start justify-between pt-1 border-t border-border">
+                  <span className="text-muted-foreground shrink-0 mr-2">Address:</span>
+                  <span className="font-medium text-foreground text-right">
+                    {cashCollectionOrder.deliveryAddress}
+                  </span>
+                </div>
+              </div>
+
+              {/* Prominent Amount Box (Amber Highlight) */}
+              <div className="rounded-2xl p-5 border border-amber-500/30 bg-amber-500/10 dark:bg-amber-950/20 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                    <Banknote className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                      Total Cash Due
+                    </span>
+                    <span className="text-2xl font-black text-amber-600 dark:text-amber-400 tracking-tight">
+                      LKR {cashCollectionOrder.grandTotal.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Checkbox Acknowledgment Toggle */}
+              <div
+                onClick={() => setCashConfirmed(!cashConfirmed)}
+                className={cn(
+                  'p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3 select-none',
+                  cashConfirmed
+                    ? 'border-primary bg-primary/10 shadow-xs ring-2 ring-primary/20'
+                    : 'border-border bg-card hover:border-muted-foreground/30'
+                )}
+              >
+                <div className="mt-0.5 shrink-0">
+                  {cashConfirmed ? (
+                    <CheckSquare className="w-5 h-5 text-primary" />
+                  ) : (
+                    <Square className="w-5 h-5 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-xs font-bold text-foreground">
+                    I confirm cash payment received in full from customer
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    I have physically received LKR {cashCollectionOrder.grandTotal.toFixed(2)} from {cashCollectionOrder.contactName || cashCollectionOrder.guestName}.
+                  </p>
+                </div>
+              </div>
+
+              <DialogFooter className="pt-2 gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setCashCollectionOrder(null)
+                    setCashConfirmed(false)
+                  }}
+                  disabled={submittingCash}
+                  className="rounded-xl"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!cashConfirmed || submittingCash}
+                  onClick={handleConfirmCashCollection}
+                  className="gap-1.5 rounded-xl font-bold bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  {submittingCash && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>Confirm Cash Collected & Mark Paid</span>
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          )}
+        </Dialog>
       </main>
     </div>
   )

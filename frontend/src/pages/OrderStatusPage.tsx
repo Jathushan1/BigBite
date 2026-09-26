@@ -15,6 +15,9 @@ import {
   Sparkles,
   Plus,
   Minus,
+  Clock,
+  Banknote,
+  CheckCircle2,
 } from 'lucide-react'
 import { getOrder, getOrderBill, cancelOrder, updateOrderItem, claimGuestOrders } from '../api/orderApi'
 import type { OrderResponse, BillResponse } from '../types/order'
@@ -213,7 +216,7 @@ export function OrderStatusPage() {
             <span>Refresh</span>
           </Button>
 
-          {order?.paymentStatus === 'PENDING' && (
+          {order?.paymentStatus === 'PENDING' && order?.paymentMethod !== 'CASH_ON_DELIVERY' && (
             <Link to={`/order/${order.id}/payment`}>
               <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
                 <CreditCard className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -236,6 +239,45 @@ export function OrderStatusPage() {
           )}
         </div>
       </div>
+
+      {/* COD Awaiting Approval Banner */}
+      {order?.paymentMethod === 'CASH_ON_DELIVERY' && order.status === 'PLACED' && (
+        <div className="p-4 rounded-3xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 text-xs text-amber-700 dark:text-amber-300">
+          <Clock className="w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div>
+            <p className="font-bold text-sm">Awaiting Branch Manager Approval</p>
+            <p className="mt-0.5 text-muted-foreground">
+              Your Cash on Delivery order is queued for branch manager approval. Food preparation will start immediately once confirmed. Total cash due upon delivery: <strong className="text-foreground">Rs. {order.grandTotal.toFixed(2)}</strong>.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* COD Payment Due on Delivery Banner */}
+      {order?.paymentMethod === 'CASH_ON_DELIVERY' && order.status === 'DELIVERED' && order.paymentStatus === 'PENDING' && (
+        <div className="p-4 rounded-3xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-3 text-xs text-blue-700 dark:text-blue-300">
+          <Banknote className="w-5 h-5 shrink-0 text-blue-600 dark:text-blue-400" />
+          <div>
+            <p className="font-bold text-sm">Order Delivered — Cash Payment Required</p>
+            <p className="mt-0.5 text-muted-foreground">
+              Please pay <strong className="text-foreground font-bold">Rs. {order.grandTotal.toFixed(2)}</strong> in cash to your delivery partner. The rider will verify and mark your payment as completed.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* COD Cash Verified by Rider Banner */}
+      {order?.paymentMethod === 'CASH_ON_DELIVERY' && order.paymentStatus === 'VERIFIED' && (
+        <div className="p-4 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-3 text-xs text-emerald-700 dark:text-emerald-300">
+          <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <div>
+            <p className="font-bold text-sm">Cash Payment Verified by Delivery Partner</p>
+            <p className="mt-0.5 text-muted-foreground">
+              Cash payment of <strong className="text-foreground font-bold">Rs. {order.grandTotal.toFixed(2)}</strong> was physically collected and verified by your delivery partner. Thank you!
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Guest Claiming Prompt Banner */}
       {canClaimGuestOrder && (
@@ -283,6 +325,7 @@ export function OrderStatusPage() {
           <StatusStepper
             currentStatus={order.status}
             fulfillmentType={order.fulfillmentType}
+            paymentMethod={order.paymentMethod}
           />
         )}
       </div>
@@ -296,10 +339,11 @@ export function OrderStatusPage() {
               <span>Itemized Bill</span>
             </div>
             <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-secondary text-secondary-foreground border border-border">
-              Payment: {order?.paymentStatus}{' '}
-              {order?.paymentMethod
-                ? `(${order.paymentMethod === 'CASH_ON_DELIVERY' ? 'COD' : 'Stripe Card'})`
-                : ''}
+              {order?.paymentMethod === 'CASH_ON_DELIVERY'
+                ? order.paymentStatus === 'VERIFIED'
+                  ? 'Payment: Cash Collected by Rider'
+                  : 'Payment: Cash Due on Delivery'
+                : `Payment: ${order?.paymentStatus} (Card)`}
             </span>
           </div>
 

@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import { CheckCircle2, Circle, AlertCircle, XCircle, ChevronDown, ChevronUp } from 'lucide-react'
-import type { FulfillmentType, OrderStatus } from '../types/order'
+import type { FulfillmentType, OrderStatus, PaymentMethod } from '../types/order'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 interface StatusStepperProps {
   currentStatus: OrderStatus
   fulfillmentType: FulfillmentType
+  paymentMethod?: PaymentMethod
 }
 
-const DELIVERY_STEPS: { key: OrderStatus; label: string }[] = [
+const CARD_DELIVERY_STEPS: { key: OrderStatus; label: string }[] = [
   { key: 'PLACED', label: 'Placed' },
   { key: 'PAYMENT_VERIFIED', label: 'Payment Verified' },
   { key: 'CONFIRMED', label: 'Confirmed' },
@@ -19,7 +20,7 @@ const DELIVERY_STEPS: { key: OrderStatus; label: string }[] = [
   { key: 'COMPLETED', label: 'Completed' },
 ]
 
-const TAKEAWAY_STEPS: { key: OrderStatus; label: string }[] = [
+const CARD_TAKEAWAY_STEPS: { key: OrderStatus; label: string }[] = [
   { key: 'PLACED', label: 'Placed' },
   { key: 'PAYMENT_VERIFIED', label: 'Payment Verified' },
   { key: 'CONFIRMED', label: 'Confirmed' },
@@ -28,9 +29,35 @@ const TAKEAWAY_STEPS: { key: OrderStatus; label: string }[] = [
   { key: 'COMPLETED', label: 'Completed' },
 ]
 
-export function StatusStepper({ currentStatus, fulfillmentType }: StatusStepperProps) {
+const COD_DELIVERY_STEPS: { key: OrderStatus; label: string }[] = [
+  { key: 'PLACED', label: 'Placed (Awaiting BM)' },
+  { key: 'CONFIRMED', label: 'Confirmed' },
+  { key: 'PREPARING', label: 'Preparing' },
+  { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery' },
+  { key: 'DELIVERED', label: 'Delivered' },
+  { key: 'PAYMENT_VERIFIED', label: 'Payment Received' },
+  { key: 'COMPLETED', label: 'Completed' },
+]
+
+const COD_TAKEAWAY_STEPS: { key: OrderStatus; label: string }[] = [
+  { key: 'PLACED', label: 'Placed (Awaiting BM)' },
+  { key: 'CONFIRMED', label: 'Confirmed' },
+  { key: 'PREPARING', label: 'Preparing' },
+  { key: 'READY_FOR_PICKUP', label: 'Ready for Pickup' },
+  { key: 'PAYMENT_VERIFIED', label: 'Payment Received' },
+  { key: 'COMPLETED', label: 'Completed' },
+]
+
+export function StatusStepper({ currentStatus, fulfillmentType, paymentMethod }: StatusStepperProps) {
   const [expandedMobile, setExpandedMobile] = useState(false)
-  const steps = fulfillmentType === 'TAKEAWAY' ? TAKEAWAY_STEPS : DELIVERY_STEPS
+  const isCod = paymentMethod === 'CASH_ON_DELIVERY'
+  const steps = isCod
+    ? fulfillmentType === 'TAKEAWAY'
+      ? COD_TAKEAWAY_STEPS
+      : COD_DELIVERY_STEPS
+    : fulfillmentType === 'TAKEAWAY'
+    ? CARD_TAKEAWAY_STEPS
+    : CARD_DELIVERY_STEPS
 
   if (currentStatus === 'CANCELLED') {
     return (

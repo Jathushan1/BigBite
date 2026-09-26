@@ -143,12 +143,21 @@ public class OrderController {
                 if (user.getBranchId() != null && !user.getBranchId().equals(currentOrder.getBranchId())) {
                     throw new AccessDeniedException("Access denied: branch managers can only update orders for their assigned branch");
                 }
-            } else if (user.getRole() == Role.DELIVERY_PARTNER) {
-                if (request.getStatus() != OrderStatus.DELIVERED && request.getStatus() != OrderStatus.COMPLETED) {
-                    throw new AccessDeniedException("Access denied: delivery partners can only advance orders to DELIVERED or COMPLETED");
+                if (currentOrder.getFulfillmentType() == FulfillmentType.DELIVERY && request.getStatus() == OrderStatus.PAYMENT_VERIFIED) {
+                    throw new AccessDeniedException("Access denied: cash collection for delivery orders must be verified by the delivery partner");
                 }
-                if (currentOrder.getStatus() != OrderStatus.OUT_FOR_DELIVERY && currentOrder.getStatus() != OrderStatus.DELIVERED) {
-                    throw new AccessDeniedException("Access denied: delivery partners can only update orders that are out for delivery");
+            } else if (user.getRole() == Role.DELIVERY_PARTNER) {
+                if (request.getStatus() != OrderStatus.OUT_FOR_DELIVERY
+                        && request.getStatus() != OrderStatus.DELIVERED
+                        && request.getStatus() != OrderStatus.PAYMENT_VERIFIED
+                        && request.getStatus() != OrderStatus.COMPLETED) {
+                    throw new AccessDeniedException("Access denied: delivery partners can only advance orders to OUT_FOR_DELIVERY, DELIVERED, PAYMENT_VERIFIED, or COMPLETED");
+                }
+                if (currentOrder.getStatus() != OrderStatus.READY_FOR_PICKUP
+                        && currentOrder.getStatus() != OrderStatus.OUT_FOR_DELIVERY
+                        && currentOrder.getStatus() != OrderStatus.DELIVERED
+                        && currentOrder.getStatus() != OrderStatus.PAYMENT_VERIFIED) {
+                    throw new AccessDeniedException("Access denied: delivery partners can only update orders that are ready, out for delivery, delivered, or awaiting completion");
                 }
             }
         }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Loader2, RefreshCw, ShoppingBag, Store, Link2 } from 'lucide-react'
+import { ArrowRight, Loader2, RefreshCw, ShoppingBag, Store, Link2, Banknote } from 'lucide-react'
 import { getOrderHistory, claimGuestOrders } from '../api/orderApi'
 import { useAuth } from '../context/AuthContext'
 import type { OrderResponse } from '../types/order'
@@ -9,6 +9,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { EmptyState } from '../components/EmptyState'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/sonner'
+import { cn } from '@/lib/utils'
 
 export function OrderHistoryPage() {
   const { user } = useAuth()
@@ -102,6 +103,30 @@ export function OrderHistoryPage() {
       ),
     },
     {
+      header: 'Payment',
+      cell: (order) => (
+        <span
+          className={cn(
+            'text-[11px] font-bold px-2 py-0.5 rounded-md border inline-flex items-center gap-1',
+            order.paymentMethod === 'CASH_ON_DELIVERY'
+              ? order.paymentStatus === 'VERIFIED'
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+              : 'bg-primary/10 text-primary border-primary/20'
+          )}
+        >
+          {order.paymentMethod === 'CASH_ON_DELIVERY' ? (
+            <>
+              <Banknote className="w-3 h-3" />
+              <span>{order.paymentStatus === 'VERIFIED' ? 'Cash Collected by Rider' : 'Cash Due on Delivery'}</span>
+            </>
+          ) : (
+            <span>Card Paid</span>
+          )}
+        </span>
+      ),
+    },
+    {
       header: 'Status',
       cell: (order) => <StatusBadge status={order.status} />,
     },
@@ -139,11 +164,20 @@ export function OrderHistoryPage() {
         <StatusBadge status={order.status} />
       </div>
 
-      <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-        <Store className="w-3.5 h-3.5" />
-        <span>{order.branchNameSnapshot || `Branch #${order.branchId}`}</span>
-        <span>•</span>
-        <span>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : ''}</span>
+      <div className="text-xs text-muted-foreground flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <Store className="w-3.5 h-3.5" />
+          <span>{order.branchNameSnapshot || `Branch #${order.branchId}`}</span>
+          <span>•</span>
+          <span>{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : ''}</span>
+        </div>
+        <span className="font-semibold text-foreground text-[11px]">
+          {order.paymentMethod === 'CASH_ON_DELIVERY'
+            ? order.paymentStatus === 'VERIFIED'
+              ? 'COD Paid'
+              : 'COD Due'
+            : 'Paid Online'}
+        </span>
       </div>
 
       <div className="flex items-center justify-between pt-3 border-t border-border">

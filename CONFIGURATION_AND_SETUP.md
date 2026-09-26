@@ -190,14 +190,6 @@ BRANCH MANAGER
 
 
 
-
-
-
-
-
-
-
-
 ### Running the Automated Tests
 
 To run the full suite of unit tests for registration, status-gated login, and admin approval workflows:

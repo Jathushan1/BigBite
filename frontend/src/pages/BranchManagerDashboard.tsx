@@ -45,6 +45,30 @@ export const BranchManagerDashboard: React.FC = () => {
     }
   }
 
+  const getBranchManagerAction = (o: OrderResponse): { label: string; nextStatus: OrderStatus } | null => {
+    if (o.status === 'PLACED') {
+      return { label: 'Approve COD', nextStatus: 'CONFIRMED' }
+    }
+    if (o.status === 'CONFIRMED') {
+      return { label: 'Start Prep', nextStatus: 'PREPARING' }
+    }
+    if (o.status === 'PREPARING') {
+      return o.fulfillmentType === 'DELIVERY'
+        ? { label: 'Dispatch', nextStatus: 'OUT_FOR_DELIVERY' }
+        : { label: 'Mark Ready', nextStatus: 'READY_FOR_PICKUP' }
+    }
+    if (o.status === 'READY_FOR_PICKUP') {
+      if (o.paymentMethod === 'CASH_ON_DELIVERY' && o.paymentStatus !== 'VERIFIED') {
+        return { label: 'Collect Cash & Verify', nextStatus: 'PAYMENT_VERIFIED' }
+      }
+      return { label: 'Complete Order', nextStatus: 'COMPLETED' }
+    }
+    if (o.status === 'PAYMENT_VERIFIED') {
+      return { label: 'Complete Order', nextStatus: 'COMPLETED' }
+    }
+    return null
+  }
+
   const columns: ColumnDef<OrderResponse>[] = [
     {
       header: 'Order',
@@ -53,9 +77,18 @@ export const BranchManagerDashboard: React.FC = () => {
     {
       header: 'Customer',
       cell: (o) => (
-        <span className="font-medium text-foreground">
-          {o.contactName || (o.customerId ? `Customer #${o.customerId}` : o.guestName)}
-        </span>
+        <div>
+          <span className="font-medium text-foreground block">
+            {o.contactName || (o.customerId ? `Customer #${o.customerId}` : o.guestName)}
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            {o.paymentMethod === 'CASH_ON_DELIVERY'
+              ? o.paymentStatus === 'VERIFIED'
+                ? 'COD • Cash Collected by Rider'
+                : 'COD • Cash Due on Delivery'
+              : `Card • ${o.paymentStatus}`}
+          </span>
+        </div>
       ),
     },
     {
@@ -78,15 +111,20 @@ export const BranchManagerDashboard: React.FC = () => {
       header: 'Action',
       className: 'text-right',
       cell: (o) => {
-        let action: { label: string; nextStatus: OrderStatus } | null = null
-        if (o.status === 'CONFIRMED') action = { label: 'Start Prep', nextStatus: 'PREPARING' }
-        else if (o.status === 'PREPARING') {
-          action =
-            o.fulfillmentType === 'DELIVERY'
-              ? { label: 'Dispatch', nextStatus: 'OUT_FOR_DELIVERY' }
-              : { label: 'Mark Ready', nextStatus: 'READY_FOR_PICKUP' }
+        if (
+          o.fulfillmentType === 'DELIVERY' &&
+          o.status === 'DELIVERED' &&
+          o.paymentMethod === 'CASH_ON_DELIVERY' &&
+          o.paymentStatus !== 'VERIFIED'
+        ) {
+          return (
+            <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20 inline-block">
+              Awaiting Rider Cash Verification
+            </span>
+          )
         }
 
+        const action = getBranchManagerAction(o)
         if (!action) return null
         const isUpdating = updatingId === o.id
 
@@ -94,7 +132,7 @@ export const BranchManagerDashboard: React.FC = () => {
           <Button
             size="sm"
             disabled={isUpdating}
-            onClick={() => handleAdvanceStatus(o.id, action!.nextStatus)}
+            onClick={() => handleAdvanceStatus(o.id, action.nextStatus)}
             className="text-xs gap-1"
           >
             {isUpdating && <Loader2 className="w-3 h-3 animate-spin" />}
@@ -106,14 +144,13 @@ export const BranchManagerDashboard: React.FC = () => {
   ]
 
   const renderCard = (o: OrderResponse) => {
-    let action: { label: string; nextStatus: OrderStatus } | null = null
-    if (o.status === 'CONFIRMED') action = { label: 'Start Prep', nextStatus: 'PREPARING' }
-    else if (o.status === 'PREPARING') {
-      action =
-        o.fulfillmentType === 'DELIVERY'
-          ? { label: 'Dispatch', nextStatus: 'OUT_FOR_DELIVERY' }
-          : { label: 'Mark Ready', nextStatus: 'READY_FOR_PICKUP' }
-    }
+    const isAwaitingRiderCash =
+      o.fulfillmentType === 'DELIVERY' &&
+      o.status === 'DELIVERED' &&
+      o.paymentMethod === 'CASH_ON_DELIVERY' &&
+      o.paymentStatus !== 'VERIFIED'
+
+    const action = isAwaitingRiderCash ? null : getBranchManagerAction(o)
 
     return (
       <div className="bg-card border border-border rounded-3xl p-5 shadow-xs space-y-3">
@@ -123,15 +160,25 @@ export const BranchManagerDashboard: React.FC = () => {
         </div>
         <p className="text-xs text-muted-foreground">
           {o.contactName || (o.customerId ? `Customer #${o.customerId}` : o.guestName)} •{' '}
-          {o.fulfillmentType}
+          {o.fulfillmentType} •{' '}
+          {o.paymentMethod === 'CASH_ON_DELIVERY'
+            ? o.paymentStatus === 'VERIFIED'
+              ? 'COD (Collected by Rider)'
+              : 'COD (Pending Rider Collection)'
+            : 'Card'}
         </p>
         <div className="flex items-center justify-between pt-2 border-t border-border">
           <span className="text-sm font-black text-primary">Rs. {o.grandTotal.toFixed(2)}</span>
+          {isAwaitingRiderCash && (
+            <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
+              Awaiting Rider Collection
+            </span>
+          )}
           {action && (
             <Button
               size="sm"
               disabled={updatingId === o.id}
-              onClick={() => handleAdvanceStatus(o.id, action!.nextStatus)}
+              onClick={() => handleAdvanceStatus(o.id, action.nextStatus)}
               className="text-xs"
             >
               {action.label}
