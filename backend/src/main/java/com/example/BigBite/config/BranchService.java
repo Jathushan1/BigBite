@@ -1,5 +1,7 @@
-package com.example.BigBite.config;
+package com.example.BigBite.service;
 
+import com.example.BigBite.model.Branch;
+import com.example.BigBite.repository.BranchRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -25,40 +27,24 @@ public class BranchService {
     }
 
     public Branch createBranch(Branch branch) {
-        if (branch.getName() == null || branch.getName().isBlank()) {
-            throw new IllegalArgumentException("Branch name is required.");
+        if (branch.getName() == null || branch.getName().trim().isEmpty()) {
+            throw new IllegalArgumentException("Branch name is required");
         }
-        if (branch.getAddress() == null || branch.getAddress().isBlank()) {
-            throw new IllegalArgumentException("Branch address is required.");
-        }
-        branch.setStatus("ACTIVE");
         return branchRepository.save(branch);
     }
 
     public Branch updateBranch(Long id, Branch updated) {
-        Branch branch = getBranchById(id);
-        if (updated.getName() != null && !updated.getName().isBlank()) {
-            branch.setName(updated.getName().trim());
-        }
-        if (updated.getAddress() != null && !updated.getAddress().isBlank()) {
-            branch.setAddress(updated.getAddress().trim());
-        }
-        if (updated.getContact() != null && !updated.getContact().isBlank()) {
-            branch.setContact(updated.getContact().trim());
-        }
-        if (updated.getStatus() != null && !updated.getStatus().isBlank()) {
-            branch.setStatus(updated.getStatus().toUpperCase().trim());
-        }
-        return branchRepository.save(branch);
+        Branch existing = getBranchById(id);
+        if (updated.getName() != null) existing.setName(updated.getName());
+        if (updated.getAddress() != null) existing.setAddress(updated.getAddress());
+        if (updated.getPhone() != null) existing.setPhone(updated.getPhone());
+        if (updated.getCity() != null) existing.setCity(updated.getCity());
+        return branchRepository.save(existing);
     }
 
     public Branch toggleStatus(Long id) {
-        Branch branch = getBranchById(id);
-        if ("ACTIVE".equalsIgnoreCase(branch.getStatus())) {
-            branch.setStatus("INACTIVE");
-        } else {
-            branch.setStatus("ACTIVE");
-        }
-        return branchRepository.save(branch);
+        Branch existing = getBranchById(id);
+        existing.setStatus("ACTIVE".equalsIgnoreCase(existing.getStatus()) ? "INACTIVE" : "ACTIVE");
+        return branchRepository.save(existing);
     }
 }
