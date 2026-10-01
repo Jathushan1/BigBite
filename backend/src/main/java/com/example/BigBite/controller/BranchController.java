@@ -1,24 +1,6 @@
 package com.example.BigBite.controller;
 
-import com.bigbite.common.dto.ApiResponse;
-import com.bigbite.inventory.StockItem;
-import com.bigbite.inventory.StockItemRepository;
-import com.bigbite.menu.MenuItemRepository;
-import com.bigbite.order.Order;
-import com.bigbite.order.OrderRepository;
-import com.bigbite.user.Role;
-import com.bigbite.user.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
-
-@RestController
-@RequestMapping("/api/branches")
 public class BranchController {
 
     @Autowired
