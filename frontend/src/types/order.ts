@@ -6,16 +6,17 @@ export type OrderStatus =
   | 'READY_FOR_PICKUP'
   | 'OUT_FOR_DELIVERY'
   | 'DELIVERED'
+  | 'DELIVERY_FAILED'
   | 'COMPLETED'
   | 'CANCELLED'
 
 export type FulfillmentType = 'DELIVERY' | 'TAKEAWAY'
 
-export type PaymentStatus = 'PENDING' | 'VERIFIED' | 'FAILED'
+export type PaymentStatus = 'PENDING' | 'VERIFIED' | 'FAILED' | 'VOIDED' | 'REFUND_PENDING' | 'REFUNDED'
 
 export type RefundStatus = 'NOT_APPLICABLE' | 'PENDING' | 'PROCESSED'
 
-export type PaymentMethod = 'CASH_ON_DELIVERY' | 'CARD_STRIPE'
+export type PaymentMethod = 'CASH_ON_DELIVERY' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CARD_STRIPE'
 
 export interface PaymentRequest {
   paymentMethod: PaymentMethod
@@ -29,6 +30,13 @@ export interface PaymentIntentResponse {
   orderId: number
   amount: number
   currency: string
+}
+
+export interface PaymentOptions {
+  methods: PaymentMethod[]
+  codEligible: boolean
+  codReason?: string | null
+  codMessage?: string | null
 }
 
 export interface OrderItemRequest {
@@ -88,6 +96,16 @@ export interface OrderResponse {
   idempotencyKey?: string | null
   version?: number | null
   cancellationReason?: string | null
+  failureReason?: string | null
+  paymentReference?: string | null
+  paymentAttempts?: number
+  cashCollected?: number | null
+  changeGiven?: number | null
+  refundedAmount?: number | null
+  riderId?: number | null
+  dispatchedAt?: string | null
+  deliveredAt?: string | null
+  guestToken?: string
   createdAt: string
   updatedAt: string
   items: OrderItemResponse[]
@@ -117,6 +135,12 @@ export interface BillResponse {
   discountAmount: number
   grandTotal: number
   paymentStatus: PaymentStatus
+  paymentMethod?: PaymentMethod | null
+  cashCollected?: number | null
+  changeGiven?: number | null
+  refundedAmount?: number | null
+  cancellationReason?: string | null
+  failureReason?: string | null
   orderStatus: OrderStatus
   createdAt: string
 }

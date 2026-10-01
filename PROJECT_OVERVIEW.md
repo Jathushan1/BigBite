@@ -243,8 +243,8 @@ stateDiagram-v2
 
 #### Pricing & Billing Calculations:
 - **Subtotal**: Sum of `(item.price * item.quantity)` for all items.
-- **Tax (GST/VAT)**: Automatically calculated at **10%** of subtotal.
-- **Delivery Fee**: Fixed at **250.00 LKR** when `fulfillmentType = DELIVERY`, and **0.00 LKR** for `TAKEAWAY`.
+- **Tax (GST/VAT)**: Automatically calculated at **5%** of subtotal.
+- **Delivery Fee**: Fixed at **300.00 LKR** when `fulfillmentType = DELIVERY`, and **0.00 LKR** for `TAKEAWAY`.
 - **Discount**: Applied if a valid promo code is provided.
 - **Total Amount**: `Subtotal + Tax + DeliveryFee - Discount`.
 

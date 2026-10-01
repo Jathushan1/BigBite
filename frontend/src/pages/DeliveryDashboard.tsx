@@ -11,16 +11,15 @@ import {
   CheckCircle,
   Banknote,
   Phone,
-  CheckSquare,
-  Square,
 } from 'lucide-react'
-import { getOrders, updateOrderStatus } from '../api/orderApi'
+import { getOrders, updateOrderStatus, collectCod, markDeliveryFailed } from '../api/orderApi'
 import type { OrderResponse, OrderStatus } from '../types/order'
 import { ResponsiveDataView, type ColumnDef } from '../components/ResponsiveDataView'
 import { StatusBadge } from '../components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/sonner'
 import { cn } from '@/lib/utils'
+import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
@@ -36,8 +35,10 @@ export const DeliveryDashboard: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [updatingId, setUpdatingId] = useState<number | null>(null)
   const [cashCollectionOrder, setCashCollectionOrder] = useState<OrderResponse | null>(null)
-  const [cashConfirmed, setCashConfirmed] = useState(false)
+  const [cashReceived, setCashReceived] = useState('')
   const [submittingCash, setSubmittingCash] = useState(false)
+  const [failureOrder, setFailureOrder] = useState<OrderResponse | null>(null)
+  const [failureReason, setFailureReason] = useState('CUSTOMER_UNREACHABLE')
 
   const loadDeliveryOrders = async () => {
     if (!user?.branchId) return
@@ -49,7 +50,7 @@ export const DeliveryDashboard: React.FC = () => {
         data.filter(
           (o) =>
             o.fulfillmentType === 'DELIVERY' &&
-            ['READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'PAYMENT_VERIFIED'].includes(o.status)
+            ['OUT_FOR_DELIVERY', 'DELIVERED'].includes(o.status)
         )
       )
     } catch (err: any) {
@@ -77,8 +78,8 @@ export const DeliveryDashboard: React.FC = () => {
   }
 
   const handleActionClick = (order: OrderResponse, nextStatus: OrderStatus) => {
-    if (nextStatus === 'PAYMENT_VERIFIED') {
-      setCashConfirmed(false)
+    if (order.paymentMethod === 'CASH_ON_DELIVERY' && nextStatus === 'DELIVERED') {
+      setCashReceived('')
       setCashCollectionOrder(order)
     } else {
       handleAdvanceStatus(order.id, nextStatus)
@@ -86,15 +87,15 @@ export const DeliveryDashboard: React.FC = () => {
   }
 
   const handleConfirmCashCollection = async () => {
-    if (!cashCollectionOrder || !cashConfirmed) return
+    if (!cashCollectionOrder || Number(cashReceived) < cashCollectionOrder.grandTotal) return
     try {
       setSubmittingCash(true)
-      await updateOrderStatus(cashCollectionOrder.id, 'PAYMENT_VERIFIED')
+      await collectCod(cashCollectionOrder.id, Number(cashReceived))
       toast.success(
         `Cash payment of Rs. ${cashCollectionOrder.grandTotal.toFixed(2)} for Order #${cashCollectionOrder.id} verified!`
       )
       setCashCollectionOrder(null)
-      setCashConfirmed(false)
+      setCashReceived('')
       await loadDeliveryOrders()
     } catch (err: any) {
       toast.error(err.message || 'Failed to verify cash collection')
@@ -103,20 +104,26 @@ export const DeliveryDashboard: React.FC = () => {
     }
   }
 
-  const getDeliveryAction = (o: OrderResponse): { label: string; nextStatus: OrderStatus } | null => {
-    if (o.status === 'READY_FOR_PICKUP') {
-      return { label: 'Start Delivery', nextStatus: 'OUT_FOR_DELIVERY' }
+  const handleReportFailure = async () => {
+    if (!failureOrder) return
+    try {
+      setUpdatingId(failureOrder.id)
+      await markDeliveryFailed(failureOrder.id, failureReason)
+      toast.success(`Delivery failure recorded for Order #${failureOrder.id}`)
+      setFailureOrder(null)
+      await loadDeliveryOrders()
+    } catch (err: any) {
+      toast.error(err.message || 'Could not report delivery failure')
+    } finally {
+      setUpdatingId(null)
     }
+  }
+
+  const getDeliveryAction = (o: OrderResponse): { label: string; nextStatus: OrderStatus } | null => {
     if (o.status === 'OUT_FOR_DELIVERY') {
-      return { label: 'Mark Delivered', nextStatus: 'DELIVERED' }
+      return { label: o.paymentMethod === 'CASH_ON_DELIVERY' ? 'Collect Cash' : 'Mark Delivered', nextStatus: 'DELIVERED' }
     }
     if (o.status === 'DELIVERED') {
-      if (o.paymentMethod === 'CASH_ON_DELIVERY' && o.paymentStatus !== 'VERIFIED') {
-        return { label: 'Collect Cash & Verify', nextStatus: 'PAYMENT_VERIFIED' }
-      }
-      return { label: 'Complete Order', nextStatus: 'COMPLETED' }
-    }
-    if (o.status === 'PAYMENT_VERIFIED') {
       return { label: 'Complete Order', nextStatus: 'COMPLETED' }
     }
     return null
@@ -181,17 +188,13 @@ export const DeliveryDashboard: React.FC = () => {
         if (!action) return null
         const isUpdating = updatingId === o.id
 
-        return (
-          <Button
-            size="sm"
-            disabled={isUpdating}
-            onClick={() => handleActionClick(o, action.nextStatus)}
-            className="text-xs gap-1"
-          >
+        return <div className="flex justify-end gap-2">
+          <Button size="sm" disabled={isUpdating} onClick={() => handleActionClick(o, action.nextStatus)} className="text-xs gap-1">
             {isUpdating && <Loader2 className="w-3 h-3 animate-spin" />}
             <span>{action.label}</span>
           </Button>
-        )
+          {o.status === 'OUT_FOR_DELIVERY' && <Button size="sm" variant="outline" onClick={() => setFailureOrder(o)}>Delivery failed</Button>}
+        </div>
       },
     },
   ]
@@ -221,6 +224,7 @@ export const DeliveryDashboard: React.FC = () => {
         </div>
         <div className="flex items-center justify-between pt-2 border-t border-border">
           <span className="text-sm font-black text-primary">Rs. {o.grandTotal.toFixed(2)}</span>
+          <div className="flex gap-2">
           {action && (
             <Button
               size="sm"
@@ -231,6 +235,8 @@ export const DeliveryDashboard: React.FC = () => {
               {action.label}
             </Button>
           )}
+          {o.status === 'OUT_FOR_DELIVERY' && <Button size="sm" variant="outline" onClick={() => setFailureOrder(o)}>Failed</Button>}
+          </div>
         </div>
       </div>
     )
@@ -261,7 +267,7 @@ export const DeliveryDashboard: React.FC = () => {
             </span>
             <Link to="/staff/orders">
               <Button size="lg" className="gap-2 shadow-md shadow-primary/20 shrink-0">
-                <span>All Orders</span>
+                <span>Assigned Orders</span>
                 <ArrowRight className="w-4 h-4 stroke-[2.5]" />
               </Button>
             </Link>
@@ -290,7 +296,7 @@ export const DeliveryDashboard: React.FC = () => {
             </div>
             <h3 className="font-bold text-foreground">Live Dispatch Queue</h3>
             <p className="text-xs text-muted-foreground">
-              View orders ready for pickup and advance them out for delivery.
+              View deliveries assigned to you by the branch manager.
             </p>
             <Link
               to="/staff/orders"
@@ -307,11 +313,7 @@ export const DeliveryDashboard: React.FC = () => {
             </div>
             <h3 className="font-bold text-foreground">Delivery Status Workflow</h3>
             <p className="text-xs text-muted-foreground">
-              Advance from <span className="font-bold text-foreground">READY_FOR_PICKUP</span> to{' '}
-              <span className="font-bold text-foreground">OUT_FOR_DELIVERY</span>, then{' '}
-              <span className="font-bold text-foreground">DELIVERED</span>. For COD, verify payment to{' '}
-              <span className="font-bold text-foreground">PAYMENT_VERIFIED</span> before marking{' '}
-              <span className="font-bold text-foreground">COMPLETED</span>.
+              Complete assigned deliveries. For COD, record the cash received at handover before completing the order.
             </p>
             <Link
               to="/staff/orders"
@@ -357,7 +359,7 @@ export const DeliveryDashboard: React.FC = () => {
           onOpenChange={(open) => {
             if (!open) {
               setCashCollectionOrder(null)
-              setCashConfirmed(false)
+              setCashReceived('')
             }
           }}
         >
@@ -425,31 +427,13 @@ export const DeliveryDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Checkbox Acknowledgment Toggle */}
-              <div
-                onClick={() => setCashConfirmed(!cashConfirmed)}
-                className={cn(
-                  'p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3 select-none',
-                  cashConfirmed
-                    ? 'border-primary bg-primary/10 shadow-xs ring-2 ring-primary/20'
-                    : 'border-border bg-card hover:border-muted-foreground/30'
+              <div className="space-y-2">
+                <label className="text-xs font-bold">Cash received</label>
+                <Input type="number" min={cashCollectionOrder.grandTotal} step="0.01"
+                  value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} />
+                {Number(cashReceived) >= cashCollectionOrder.grandTotal && (
+                  <p className="text-sm">Change due: LKR {(Number(cashReceived) - cashCollectionOrder.grandTotal).toFixed(2)}</p>
                 )}
-              >
-                <div className="mt-0.5 shrink-0">
-                  {cashConfirmed ? (
-                    <CheckSquare className="w-5 h-5 text-primary" />
-                  ) : (
-                    <Square className="w-5 h-5 text-muted-foreground" />
-                  )}
-                </div>
-                <div className="space-y-0.5">
-                  <p className="text-xs font-bold text-foreground">
-                    I confirm cash payment received in full from customer
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    I have physically received LKR {cashCollectionOrder.grandTotal.toFixed(2)} from {cashCollectionOrder.contactName || cashCollectionOrder.guestName}.
-                  </p>
-                </div>
               </div>
 
               <DialogFooter className="pt-2 gap-2 sm:gap-0">
@@ -458,7 +442,7 @@ export const DeliveryDashboard: React.FC = () => {
                   variant="outline"
                   onClick={() => {
                     setCashCollectionOrder(null)
-                    setCashConfirmed(false)
+                    setCashReceived('')
                   }}
                   disabled={submittingCash}
                   className="rounded-xl"
@@ -467,7 +451,7 @@ export const DeliveryDashboard: React.FC = () => {
                 </Button>
                 <Button
                   type="button"
-                  disabled={!cashConfirmed || submittingCash}
+                  disabled={!cashReceived || Number(cashReceived) < cashCollectionOrder.grandTotal || submittingCash}
                   onClick={handleConfirmCashCollection}
                   className="gap-1.5 rounded-xl font-bold bg-amber-600 hover:bg-amber-700 text-white"
                 >
@@ -477,6 +461,21 @@ export const DeliveryDashboard: React.FC = () => {
               </DialogFooter>
             </DialogContent>
           )}
+        </Dialog>
+        <Dialog open={!!failureOrder} onOpenChange={(open) => { if (!open) setFailureOrder(null) }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Report delivery failure</DialogTitle>
+              <DialogDescription>Order #{failureOrder?.id}. Choose the reason recorded in its status history.</DialogDescription>
+            </DialogHeader>
+            <select value={failureReason} onChange={(event) => setFailureReason(event.target.value)}
+              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
+              <option value="CUSTOMER_UNREACHABLE">Customer unreachable</option>
+              <option value="REFUSED">Customer refused delivery</option>
+              <option value="WRONG_ADDRESS">Wrong address</option>
+            </select>
+            <DialogFooter><Button disabled={updatingId !== null} onClick={handleReportFailure}>Report failure</Button></DialogFooter>
+          </DialogContent>
         </Dialog>
       </main>
     </div>

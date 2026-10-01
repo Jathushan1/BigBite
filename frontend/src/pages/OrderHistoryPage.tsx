@@ -28,9 +28,20 @@ export function OrderHistoryPage() {
   const handleClaimOrders = async () => {
     try {
       setClaiming(true)
-      const res = await claimGuestOrders()
-      toast.success(res.message || 'Guest orders linked successfully!')
-      if (res.claimedCount > 0) {
+      const orderIds = Object.keys(sessionStorage)
+        .filter((key) => /^bigbite\.guestToken\.\d+$/.test(key))
+        .map((key) => Number(key.split('.').at(-1)))
+      if (orderIds.length === 0) {
+        toast.error('No guest orders from this browser are available to link.')
+        return
+      }
+      let claimedCount = 0
+      for (const orderId of orderIds) {
+        const res = await claimGuestOrders(orderId)
+        claimedCount += res.claimedCount
+      }
+      toast.success(`${claimedCount} guest order(s) linked to your account.`)
+      if (claimedCount > 0) {
         await loadHistory()
       }
     } catch (err: any) {
@@ -217,7 +228,7 @@ export function OrderHistoryPage() {
             onClick={handleClaimOrders}
             disabled={claiming}
             className="gap-1.5"
-            title="Link past guest orders made with your email or phone to this account"
+            title="Link guest orders placed in this browser using their private access tokens"
           >
             <Link2 className={`w-3.5 h-3.5 ${claiming ? 'animate-spin' : ''}`} />
             <span>{claiming ? 'Linking...' : 'Link Guest Orders'}</span>

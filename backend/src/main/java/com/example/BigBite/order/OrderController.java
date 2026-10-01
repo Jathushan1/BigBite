@@ -7,12 +7,17 @@ import com.example.BigBite.order.dto.OrderResponseDto;
 import com.example.BigBite.order.dto.OrderStatusUpdateRequestDto;
 import com.example.BigBite.order.dto.PaymentRequestDto;
 import com.example.BigBite.order.dto.UpdateOrderItemRequestDto;
+import com.example.BigBite.order.dto.PaymentOptionsDto;
+import com.example.BigBite.order.dto.CodCollectRequestDto;
+import com.example.BigBite.order.dto.DeliveryFailedRequestDto;
+import com.example.BigBite.order.dto.CancelOrderRequestDto;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -20,6 +25,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -31,8 +37,9 @@ import java.util.Map;
 import com.example.BigBite.auth.Role;
 import com.example.BigBite.auth.User;
 import com.example.BigBite.auth.UserRepository;
+import com.example.BigBite.auth.UserStatus;
+import com.example.BigBite.auth.dto.UserDto;
 import com.example.BigBite.order.dto.PaymentIntentResponseDto;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 
@@ -43,11 +50,14 @@ public class OrderController {
     private final OrderService orderService;
     private final UserRepository userRepository;
     private final OrderRateLimiter orderRateLimiter;
+    private final OrderAccessGuard accessGuard;
 
-    public OrderController(OrderService orderService, UserRepository userRepository, OrderRateLimiter orderRateLimiter) {
+    public OrderController(OrderService orderService, UserRepository userRepository, OrderRateLimiter orderRateLimiter,
+                           OrderAccessGuard accessGuard) {
         this.orderService = orderService;
         this.userRepository = userRepository;
         this.orderRateLimiter = orderRateLimiter;
+        this.accessGuard = accessGuard;
     }
 
     private User getAuthenticatedUser(UserDetails userDetails) {
@@ -67,6 +77,7 @@ public class OrderController {
     @PostMapping
     public ResponseEntity<OrderResponseDto> placeOrder(
             @Valid @RequestBody OrderRequestDto request,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
             @AuthenticationPrincipal UserDetails userDetails,
             HttpServletRequest servletRequest) {
         User user = getAuthenticatedUser(userDetails);
@@ -77,6 +88,9 @@ public class OrderController {
             throw new OrderRateLimitExceededException("Too many order requests. Please wait a moment before placing another order.");
         }
         if (user != null) {
+            if (user.getRole() != Role.CUSTOMER) {
+                throw new OrderApiException(HttpStatus.FORBIDDEN, "CUSTOMER_REQUIRED", "Only customers can place personal orders");
+            }
             request.setCustomerId(user.getId());
             if (request.getContactName() == null || request.getContactName().isBlank()) {
                 request.setContactName(user.getName());
@@ -84,23 +98,22 @@ public class OrderController {
             if (request.getContactPhone() == null || request.getContactPhone().isBlank()) {
                 request.setContactPhone(user.getPhoneNumber());
             }
+        } else {
+            request.setCustomerId(null);
         }
 
-        OrderResponseDto response = orderService.placeOrder(request);
+        OrderResponseDto response = orderService.placeOrderFor(request, user, guestToken);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<OrderResponseDto> getOrder(
             @PathVariable Long id,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
             @AuthenticationPrincipal UserDetails userDetails) {
-        OrderResponseDto response = orderService.getOrderById(id);
         User user = getAuthenticatedUser(userDetails);
-        if (user != null && user.getRole() == Role.CUSTOMER) {
-            if (response.getCustomerId() != null && !response.getCustomerId().equals(user.getId())) {
-                throw new AccessDeniedException("Access denied: you do not own this order");
-            }
-        }
+        accessGuard.requireView(id, user, guestToken);
+        OrderResponseDto response = orderService.getOrderFor(id, user, guestToken);
         return ResponseEntity.ok(response);
     }
 
@@ -111,19 +124,32 @@ public class OrderController {
             @RequestParam(required = false) OrderStatus status,
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = getAuthenticatedUser(userDetails);
-        if (user != null && user.getRole() == Role.CUSTOMER) {
-            List<OrderResponseDto> orders = orderService.getOrders(user.getId(), null, status);
-            return ResponseEntity.ok(orders);
+        if (user == null) {
+            throw new OrderApiException(HttpStatus.UNAUTHORIZED, "AUTH_REQUIRED", "Authentication is required to list orders");
         }
-
-        if (user != null && user.getRole() == Role.BRANCH_MANAGER && user.getBranchId() != null) {
-            Long effectiveBranch = (branchId != null) ? branchId : user.getBranchId();
-            List<OrderResponseDto> orders = orderService.getOrders(null, effectiveBranch, status);
-            return ResponseEntity.ok(orders);
+        if (user.getRole() == Role.CUSTOMER) {
+            customerId = user.getId();
+            branchId = null;
+        } else if (user.getRole() == Role.BRANCH_MANAGER || user.getRole() == Role.DELIVERY_PARTNER) {
+            customerId = null;
+            if (branchId == null) branchId = user.getBranchId();
         }
-
-        List<OrderResponseDto> orders = orderService.getOrders(customerId, branchId, status);
+        accessGuard.requireList(user, customerId, branchId);
+        List<OrderResponseDto> orders = orderService.getOrdersFor(customerId, branchId, status, user);
         return ResponseEntity.ok(orders);
+    }
+
+    @GetMapping("/riders")
+    public ResponseEntity<List<UserDto>> getBranchRiders(@AuthenticationPrincipal UserDetails userDetails) {
+        User user = getAuthenticatedUser(userDetails);
+        if (user == null || user.getRole() != Role.BRANCH_MANAGER || user.getBranchId() == null) {
+            throw new OrderApiException(HttpStatus.FORBIDDEN, "MANAGER_REQUIRED",
+                    "An assigned branch manager is required to choose a rider");
+        }
+        accessGuard.requireUsableAccount(user);
+        return ResponseEntity.ok(userRepository.findByRoleAndBranchIdAndStatus(
+                Role.DELIVERY_PARTNER, user.getBranchId(), UserStatus.APPROVED).stream()
+                .map(UserDto::fromEntity).toList());
     }
 
     @PutMapping("/{id}/status")
@@ -132,60 +158,22 @@ public class OrderController {
             @Valid @RequestBody OrderStatusUpdateRequestDto request,
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = getAuthenticatedUser(userDetails);
-        if (user != null) {
-            if (user.getRole() == Role.CUSTOMER) {
-                throw new AccessDeniedException("Access denied: customers cannot update order status");
-            }
-
-            OrderResponseDto currentOrder = orderService.getOrderById(id);
-
-            if (user.getRole() == Role.BRANCH_MANAGER) {
-                if (user.getBranchId() != null && !user.getBranchId().equals(currentOrder.getBranchId())) {
-                    throw new AccessDeniedException("Access denied: branch managers can only update orders for their assigned branch");
-                }
-                if (currentOrder.getFulfillmentType() == FulfillmentType.DELIVERY && request.getStatus() == OrderStatus.PAYMENT_VERIFIED) {
-                    throw new AccessDeniedException("Access denied: cash collection for delivery orders must be verified by the delivery partner");
-                }
-            } else if (user.getRole() == Role.DELIVERY_PARTNER) {
-                if (request.getStatus() != OrderStatus.OUT_FOR_DELIVERY
-                        && request.getStatus() != OrderStatus.DELIVERED
-                        && request.getStatus() != OrderStatus.PAYMENT_VERIFIED
-                        && request.getStatus() != OrderStatus.COMPLETED) {
-                    throw new AccessDeniedException("Access denied: delivery partners can only advance orders to OUT_FOR_DELIVERY, DELIVERED, PAYMENT_VERIFIED, or COMPLETED");
-                }
-                if (currentOrder.getStatus() != OrderStatus.READY_FOR_PICKUP
-                        && currentOrder.getStatus() != OrderStatus.OUT_FOR_DELIVERY
-                        && currentOrder.getStatus() != OrderStatus.DELIVERED
-                        && currentOrder.getStatus() != OrderStatus.PAYMENT_VERIFIED) {
-                    throw new AccessDeniedException("Access denied: delivery partners can only update orders that are ready, out for delivery, delivered, or awaiting completion");
-                }
-            }
-        }
-        OrderResponseDto updated = orderService.updateOrderStatus(id, request.getStatus());
+        accessGuard.requireStaffAction(id, user);
+        OrderResponseDto updated = orderService.updateOrderStatus(id, request.getStatus(), user,
+                request.getRiderId(), request.getNote());
         return ResponseEntity.ok(updated);
     }
 
     @PostMapping("/{id}/cancel")
     public ResponseEntity<OrderResponseDto> cancelOrder(
             @PathVariable Long id,
+            @RequestBody(required = false) CancelOrderRequestDto request,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = getAuthenticatedUser(userDetails);
-        if (user != null) {
-            if (user.getRole() == Role.CUSTOMER) {
-                OrderResponseDto order = orderService.getOrderById(id);
-                if (order.getCustomerId() != null && !order.getCustomerId().equals(user.getId())) {
-                    throw new AccessDeniedException("Access denied: you cannot cancel an order belonging to another customer");
-                }
-            } else if (user.getRole() == Role.DELIVERY_PARTNER) {
-                throw new AccessDeniedException("Access denied: delivery partners cannot cancel orders");
-            } else if (user.getRole() == Role.BRANCH_MANAGER && user.getBranchId() != null) {
-                OrderResponseDto order = orderService.getOrderById(id);
-                if (!user.getBranchId().equals(order.getBranchId())) {
-                    throw new AccessDeniedException("Access denied: branch managers can only cancel orders belonging to their assigned branch");
-                }
-            }
-        }
-        OrderResponseDto cancelled = orderService.cancelOrder(id);
+        accessGuard.requireCancel(id, user, guestToken);
+        OrderResponseDto cancelled = orderService.cancelOrderFor(id, user, guestToken,
+                request != null ? request.reason() : null);
         return ResponseEntity.ok(cancelled);
     }
 
@@ -194,60 +182,92 @@ public class OrderController {
             @PathVariable Long id,
             @PathVariable Long itemId,
             @Valid @RequestBody UpdateOrderItemRequestDto request,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = getAuthenticatedUser(userDetails);
-        if (user != null && user.getRole() == Role.CUSTOMER) {
-            OrderResponseDto order = orderService.getOrderById(id);
-            if (order.getCustomerId() != null && !order.getCustomerId().equals(user.getId())) {
-                throw new AccessDeniedException("Access denied: you cannot modify an order belonging to another customer");
-            }
-        }
-        OrderResponseDto updated = orderService.updateOrderItem(id, itemId, request.getQuantity());
+        accessGuard.requireCustomerAction(id, user, guestToken);
+        OrderResponseDto updated = orderService.updateOrderItemFor(id, itemId, request.getQuantity(), user, guestToken);
         return ResponseEntity.ok(updated);
     }
 
     @GetMapping("/{id}/bill")
     public ResponseEntity<BillDto> getBill(
             @PathVariable Long id,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
             @AuthenticationPrincipal UserDetails userDetails) {
-        BillDto bill = orderService.getOrderBill(id);
         User user = getAuthenticatedUser(userDetails);
-        if (user != null && user.getRole() == Role.CUSTOMER) {
-            if (bill.getCustomerId() != null && !bill.getCustomerId().equals(user.getId())) {
-                throw new AccessDeniedException("Access denied: you do not own this order bill");
-            }
-        }
+        accessGuard.requireView(id, user, guestToken);
+        BillDto bill = orderService.getBillFor(id, user, guestToken);
         return ResponseEntity.ok(bill);
     }
 
     @PostMapping("/{id}/payment")
-    public ResponseEntity<OrderResponseDto> recordPayment(
+    public ResponseEntity<?> recordPayment(
             @PathVariable Long id,
             @RequestBody PaymentRequestDto request,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = getAuthenticatedUser(userDetails);
-        if (user != null && user.getRole() == Role.CUSTOMER) {
-            OrderResponseDto order = orderService.getOrderById(id);
-            if (order.getCustomerId() != null && !order.getCustomerId().equals(user.getId())) {
-                throw new AccessDeniedException("Access denied: you do not own this order");
-            }
+        accessGuard.requireCustomerAction(id, user, guestToken);
+        OrderService.PaymentResult result = orderService.recordPaymentFor(id, request, idempotencyKey, user, guestToken);
+        if (result.httpStatus() == 402) {
+            return ResponseEntity.status(402).body(Map.of(
+                    "error", result.order().getStatus() == OrderStatus.CANCELLED ? "PAYMENT_FAILED" : "PAYMENT_DECLINED",
+                    "message", result.order().getStatus() == OrderStatus.CANCELLED
+                            ? "Card payment declined three times; the order was cancelled"
+                            : "Card payment declined; try another card",
+                    "order", result.order()));
         }
-        OrderResponseDto updated = orderService.recordPayment(id, request);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.status(result.httpStatus()).body(result.order());
+    }
+
+    @GetMapping("/{id}/payment-options")
+    public ResponseEntity<PaymentOptionsDto> getPaymentOptions(
+            @PathVariable Long id,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        accessGuard.requireCustomerAction(id, getAuthenticatedUser(userDetails), guestToken);
+        return ResponseEntity.ok(orderService.getPaymentOptionsFor(id, getAuthenticatedUser(userDetails), guestToken));
+    }
+
+    @PostMapping("/{id}/cod/collect")
+    public ResponseEntity<OrderResponseDto> collectCod(
+            @PathVariable Long id,
+            @Valid @RequestBody CodCollectRequestDto request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        User user = getAuthenticatedUser(userDetails);
+        accessGuard.requireStaffAction(id, user);
+        return ResponseEntity.ok(orderService.collectCod(id, request.cashCollected(), user));
+    }
+
+    @PostMapping("/{id}/delivery-failed")
+    public ResponseEntity<OrderResponseDto> markDeliveryFailed(
+            @PathVariable Long id,
+            @Valid @RequestBody DeliveryFailedRequestDto request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        User user = getAuthenticatedUser(userDetails);
+        accessGuard.requireStaffAction(id, user);
+        return ResponseEntity.ok(orderService.markDeliveryFailed(id, request.reason(), user));
+    }
+
+    @GetMapping("/{id}/history")
+    public ResponseEntity<List<OrderStatusHistory>> getStatusHistory(
+            @PathVariable Long id,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        accessGuard.requireView(id, getAuthenticatedUser(userDetails), guestToken);
+        return ResponseEntity.ok(orderService.getHistoryFor(id, getAuthenticatedUser(userDetails), guestToken));
     }
 
     @PostMapping("/{id}/payment-intent")
     public ResponseEntity<PaymentIntentResponseDto> createPaymentIntent(
             @PathVariable Long id,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = getAuthenticatedUser(userDetails);
-        if (user != null && user.getRole() == Role.CUSTOMER) {
-            OrderResponseDto order = orderService.getOrderById(id);
-            if (order.getCustomerId() != null && !order.getCustomerId().equals(user.getId())) {
-                throw new AccessDeniedException("Access denied: you do not own this order");
-            }
-        }
-        PaymentIntentResponseDto response = orderService.createPaymentIntent(id);
+        accessGuard.requireCustomerAction(id, user, guestToken);
+        PaymentIntentResponseDto response = orderService.createPaymentIntentFor(id, user, guestToken);
         return ResponseEntity.ok(response);
     }
 
@@ -257,7 +277,8 @@ public class OrderController {
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = getAuthenticatedUser(userDetails);
         Long targetId = (user != null && user.getRole() == Role.CUSTOMER) ? user.getId() : customerId;
-        return ResponseEntity.ok(orderService.getSavedAddresses(targetId));
+        accessGuard.requireAddressOwner(user, targetId);
+        return ResponseEntity.ok(orderService.getSavedAddressesFor(targetId, user));
     }
 
     @PostMapping("/addresses")
@@ -268,18 +289,29 @@ public class OrderController {
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = getAuthenticatedUser(userDetails);
         Long targetId = (user != null && user.getRole() == Role.CUSTOMER) ? user.getId() : customerId;
-        return ResponseEntity.ok(orderService.saveAddress(targetId, addressLine, city));
+        accessGuard.requireAddressOwner(user, targetId);
+        return ResponseEntity.ok(orderService.saveAddressFor(targetId, addressLine, city, user));
     }
 
     @PostMapping("/claim")
     public ResponseEntity<ClaimOrdersResponseDto> claimGuestOrders(
+            @RequestParam Long orderId,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = getAuthenticatedUser(userDetails);
-        if (user == null) {
-            throw new AccessDeniedException("Must be authenticated to claim guest orders");
+        if (user == null || user.getRole() != Role.CUSTOMER) {
+            throw new OrderApiException(HttpStatus.UNAUTHORIZED, "CUSTOMER_REQUIRED", "Sign in as a customer to claim a guest order");
         }
-        ClaimOrdersResponseDto response = orderService.claimGuestOrders(user.getId(), user.getEmail(), user.getPhoneNumber());
+        accessGuard.requireUsableAccount(user);
+        accessGuard.requireGuestToken(orderId, guestToken);
+        ClaimOrdersResponseDto response = orderService.claimGuestOrderFor(orderId, user.getId(), guestToken);
         return ResponseEntity.ok(response);
+    }
+
+    @ExceptionHandler(OrderApiException.class)
+    public ResponseEntity<Map<String, Object>> handleOrderApiException(OrderApiException ex) {
+        return ResponseEntity.status(ex.getStatus()).body(Map.of(
+                "error", ex.getCode(), "message", ex.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -287,9 +319,16 @@ public class OrderController {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
                 "timestamp", LocalDateTime.now(),
                 "status", HttpStatus.BAD_REQUEST.value(),
-                "error", "Bad Request",
+                "error", "VALIDATION_ERROR",
                 "message", ex.getMessage()
         ));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidBody(MethodArgumentNotValidException ex) {
+        String message = ex.getBindingResult().getFieldErrors().stream()
+                .findFirst().map(error -> error.getDefaultMessage()).orElse("Invalid request body");
+        return ResponseEntity.badRequest().body(Map.of("error", "VALIDATION_ERROR", "message", message));
     }
 
     @ExceptionHandler(IllegalStateException.class)
@@ -297,7 +336,7 @@ public class OrderController {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
                 "timestamp", LocalDateTime.now(),
                 "status", HttpStatus.BAD_REQUEST.value(),
-                "error", "Invalid Operation",
+                "error", "INVALID_OPERATION",
                 "message", ex.getMessage()
         ));
     }
@@ -307,7 +346,7 @@ public class OrderController {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
                 "timestamp", LocalDateTime.now(),
                 "status", HttpStatus.CONFLICT.value(),
-                "error", "Conflict",
+                "error", "CONCURRENT_UPDATE",
                 "message", "This order was just updated by another user or session. Please refresh to see the latest status."
         ));
     }
@@ -317,10 +356,8 @@ public class OrderController {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of(
                 "timestamp", LocalDateTime.now(),
                 "status", HttpStatus.TOO_MANY_REQUESTS.value(),
-                "error", "Too Many Requests",
+                "error", "RATE_LIMITED",
                 "message", ex.getMessage()
         ));
     }
 }
-
-

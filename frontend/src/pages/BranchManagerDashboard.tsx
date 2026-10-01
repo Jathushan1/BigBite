@@ -47,23 +47,23 @@ export const BranchManagerDashboard: React.FC = () => {
 
   const getBranchManagerAction = (o: OrderResponse): { label: string; nextStatus: OrderStatus } | null => {
     if (o.status === 'PLACED') {
-      return { label: 'Approve COD', nextStatus: 'CONFIRMED' }
+      return null
+    }
+    if (o.status === 'PAYMENT_VERIFIED') {
+      return { label: 'Confirm Order', nextStatus: 'CONFIRMED' }
     }
     if (o.status === 'CONFIRMED') {
       return { label: 'Start Prep', nextStatus: 'PREPARING' }
     }
     if (o.status === 'PREPARING') {
       return o.fulfillmentType === 'DELIVERY'
-        ? { label: 'Dispatch', nextStatus: 'OUT_FOR_DELIVERY' }
+        ? null
         : { label: 'Mark Ready', nextStatus: 'READY_FOR_PICKUP' }
     }
     if (o.status === 'READY_FOR_PICKUP') {
       if (o.paymentMethod === 'CASH_ON_DELIVERY' && o.paymentStatus !== 'VERIFIED') {
-        return { label: 'Collect Cash & Verify', nextStatus: 'PAYMENT_VERIFIED' }
+        return null
       }
-      return { label: 'Complete Order', nextStatus: 'COMPLETED' }
-    }
-    if (o.status === 'PAYMENT_VERIFIED') {
       return { label: 'Complete Order', nextStatus: 'COMPLETED' }
     }
     return null

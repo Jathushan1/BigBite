@@ -105,8 +105,45 @@ public class Order {
     @Column(name = "cancellation_reason", nullable = true)
     private String cancellationReason;
 
+    @Column(name = "failure_reason", length = 32)
+    private String failureReason;
+
+    @Column(name = "payment_reference", length = 64)
+    private String paymentReference;
+
+    @Column(name = "payment_idempotency_key", length = 100)
+    private String paymentIdempotencyKey;
+
+    @Column(name = "payment_attempts", nullable = false, columnDefinition = "integer default 0")
+    private int paymentAttempts;
+
+    @Column(name = "cash_collected", precision = 10, scale = 2)
+    private BigDecimal cashCollected;
+
+    @Column(name = "change_given", precision = 10, scale = 2)
+    private BigDecimal changeGiven;
+
+    @Column(name = "refunded_amount", nullable = false, precision = 10, scale = 2,
+            columnDefinition = "decimal(10,2) default 0.00")
+    private BigDecimal refundedAmount = new BigDecimal("0.00");
+
+    @Column(name = "rider_id")
+    private Long riderId;
+
+    @Column(name = "dispatched_at")
+    private LocalDateTime dispatchedAt;
+
+    @Column(name = "delivered_at")
+    private LocalDateTime deliveredAt;
+
+    @Column(name = "guest_access_nonce", length = 64)
+    private String guestAccessNonce;
+
     @Column(name = "idempotency_key", nullable = true, unique = true, length = 100)
     private String idempotencyKey;
+
+    @Column(name = "request_fingerprint", length = 64)
+    private String requestFingerprint;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -347,6 +384,9 @@ public class Order {
         this.idempotencyKey = idempotencyKey;
     }
 
+    public String getRequestFingerprint() { return requestFingerprint; }
+    public void setRequestFingerprint(String requestFingerprint) { this.requestFingerprint = requestFingerprint; }
+
     public String getBranchNameSnapshot() {
         return branchNameSnapshot;
     }
@@ -386,6 +426,27 @@ public class Order {
     public void setCancellationReason(String cancellationReason) {
         this.cancellationReason = cancellationReason;
     }
+
+    public String getFailureReason() { return failureReason; }
+    public void setFailureReason(String failureReason) { this.failureReason = failureReason; }
+    public String getPaymentReference() { return paymentReference; }
+    public void setPaymentReference(String paymentReference) { this.paymentReference = paymentReference; }
+    public String getPaymentIdempotencyKey() { return paymentIdempotencyKey; }
+    public void setPaymentIdempotencyKey(String paymentIdempotencyKey) { this.paymentIdempotencyKey = paymentIdempotencyKey; }
+    public int getPaymentAttempts() { return paymentAttempts; }
+    public void setPaymentAttempts(int paymentAttempts) { this.paymentAttempts = paymentAttempts; }
+    public BigDecimal getCashCollected() { return cashCollected; }
+    public void setCashCollected(BigDecimal cashCollected) { this.cashCollected = cashCollected; }
+    public BigDecimal getChangeGiven() { return changeGiven; }
+    public void setChangeGiven(BigDecimal changeGiven) { this.changeGiven = changeGiven; }
+    public BigDecimal getRefundedAmount() { return refundedAmount; }
+    public void setRefundedAmount(BigDecimal refundedAmount) { this.refundedAmount = refundedAmount; }
+    public Long getRiderId() { return riderId; }
+    public void setRiderId(Long riderId) { this.riderId = riderId; }
+    public LocalDateTime getDispatchedAt() { return dispatchedAt; }
+    public void setDispatchedAt(LocalDateTime dispatchedAt) { this.dispatchedAt = dispatchedAt; }
+    public LocalDateTime getDeliveredAt() { return deliveredAt; }
+    public void setDeliveredAt(LocalDateTime deliveredAt) { this.deliveredAt = deliveredAt; }
+    public String getGuestAccessNonce() { return guestAccessNonce; }
+    public void setGuestAccessNonce(String guestAccessNonce) { this.guestAccessNonce = guestAccessNonce; }
 }
-
-

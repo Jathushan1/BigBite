@@ -33,6 +33,11 @@ public class MockBranchLookupService implements BranchLookupService {
     }
 
     @Override
+    public boolean acceptsCod(Long branchId) {
+        return branchId != null && (branchId == 1L || branchId == 3L);
+    }
+
+    @Override
     public String getBranchName(Long branchId) {
         BranchRecord branch = BRANCHES.get(branchId);
         return branch != null ? branch.name() : "Branch #" + branchId;

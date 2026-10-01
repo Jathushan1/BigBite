@@ -1,357 +1,65 @@
-# BigBite — Order & Billing Module
+# BigBite Order & Billing Module
 
-A robust, self-contained **Order & Billing Module** built for the **BigBite** food-ordering platform. Designed to integrate seamlessly with parallel microservices/modules through mocked service interfaces until other branch modules (Branch Management, Menu Management, Rider & Delivery, Promotions & Discounts, Inventory & Stock, Auth/RBAC) are merged.
+This module implements guest and account checkout, server-priced bills, mock card charges, cash on delivery, cancellation and refunds, delivery handover, and order history. The attached `ORDER_MODULE_README.md` supplied by the project owner is the business specification; `ORDER_MODULE_IMPLEMENTATION_PLAN.md` records the agreed choices and build phases.
 
----
+## Business rules
 
-## Table of Contents
-1. [Architecture & Design](#architecture--design)
-2. [Order Lifecycle & State Machine](#order-lifecycle--state-machine)
-3. [Mock Services Catalog](#mock-services-catalog)
-4. [Backend API Reference](#backend-api-reference)
-5. [Data Models & Schema](#data-models--schema)
-6. [Business Rules & Financial Precision](#business-rules--financial-precision)
-7. [Frontend Architecture & Routes](#frontend-architecture--routes)
-8. [Getting Started & Setup](#getting-started--setup)
-9. [Automated Tests & Quality Gates](#automated-tests--quality-gates)
-10. [End-to-End Verification Guide](#end-to-end-verification-guide)
+| Rule | Value |
+|---|---:|
+| Tax | 5% of item subtotal |
+| Delivery fee | LKR 300 for delivery, zero for takeaway |
+| Minimum item subtotal | LKR 500 |
+| Item limits | 20 distinct items, 50 units per line |
+| Unpaid card timeout | 15 minutes |
+| COD maximum total | LKR 10,000 |
+| COD failed-delivery strikes | 2 |
+| Concurrent open COD orders | 2 |
+| Card attempt limit | 3 declines |
 
----
+These defaults are configurable in `backend/src/main/resources/application.properties`. The server calculates all amounts from frozen item prices. Items can be edited only while an order is `PLACED` and no payment method has been selected.
 
-## Architecture & Design
+## Lifecycle
 
-The module is partitioned into a Spring Boot 4.1.x / Java 21 REST API backend and a modern React 19 + Vite + Tailwind CSS v4 client.
+- Card: `PLACED → PAYMENT_VERIFIED → CONFIRMED → PREPARING → OUT_FOR_DELIVERY → DELIVERED → COMPLETED` for delivery, or `PREPARING → READY_FOR_PICKUP → COMPLETED` for takeaway.
+- COD: `PLACED → CONFIRMED` with payment pending. The branch manager prepares and dispatches delivery to an approved rider from the same branch. Cash collection moves delivery from `OUT_FOR_DELIVERY` to `DELIVERED`, or takeaway from `READY_FOR_PICKUP` to `COMPLETED`, and verifies payment. `COMPLETED` always requires verified payment.
+- Delivery can move from `OUT_FOR_DELIVERY` to terminal `DELIVERY_FAILED` with a reason. Cancellation is allowed before `PREPARING`; unpaid payment is voided and a verified card charge is refunded through the mock refund gateway.
+- Each status change is recorded in `order_status_history`. Inventory is reserved synchronously at placement; mock after-commit listeners handle promotion reservation, inventory consumption/release, and cancellation/failure effects.
 
-```
-BigBite/
-├── backend/
-│   └── src/main/java/com/example/BigBite/order/
-│       ├── Order.java                         # Primary order entity
-│       ├── OrderItem.java                     # Order line item with frozen snapshots
-│       ├── OrderStatus.java                   # State machine enum
-│       ├── FulfillmentType.java               # DELIVERY / TAKEAWAY enum
-│       ├── PaymentStatus.java                 # PENDING / VERIFIED / FAILED enum
-│       ├── OrderRepository.java               # Spring Data JPA repository
-│       ├── OrderService.java                  # Business validation, calculations, state rules
-│       ├── OrderController.java               # 8 REST endpoints + global error handling
-│       ├── dto/                               # Typed request & response DTOs
-│       └── external/                          # Mock services for external boundaries
-└── frontend/
-    └── src/
-        ├── api/orderApi.ts                    # Typed API client for /api/orders
-        ├── context/CartContext.tsx            # In-memory cart provider & calculations
-        ├── mocks/orderMockData.ts             # 1:1 synchronized mock branch & menu data
-        ├── types/order.ts                     # TypeScript interfaces
-        ├── components/
-        │   ├── Navbar.tsx                     # Global navigation bar & cart badge
-        │   └── StatusStepper.tsx              # Visual horizontal pipeline tracker
-        └── pages/
-            ├── BranchSelectPage.tsx           # Route: /
-            ├── MenuPage.tsx                   # Route: /branch/:branchId/menu
-            ├── CartPage.tsx                   # Route: /cart
-            ├── CheckoutPage.tsx               # Route: /checkout
-            ├── PaymentPage.tsx                # Route: /order/:orderId/payment
-            ├── OrderStatusPage.tsx            # Route: /order/:orderId
-            ├── OrderHistoryPage.tsx           # Route: /orders
-            └── StaffOrderListPage.tsx         # Route: /staff/orders
-```
+## API
 
----
+Base path: `/api/orders`. Authenticated users send `Authorization: Bearer <JWT>`. Anonymous guests receive `guestToken` only in the placement response and send it as `X-Guest-Token` for that order. Store it privately. The browser keeps tokens in session storage by order ID. A guest order created before this token scheme requires support recovery; an order ID and phone number alone never grant access.
 
-## Order Lifecycle & State Machine
+| Route | Purpose |
+|---|---|
+| `POST /` | Place order; signed-in customer identity comes from JWT, guests receive a private token |
+| `GET /{id}`, `GET /{id}/bill`, `GET /{id}/history` | Read owned order, bill, and audit trail |
+| `GET /?customerId=...` or `?branchId=...&status=...` | Scoped account or branch list |
+| `PATCH /{id}/items/{itemId}` | Change quantity before payment |
+| `GET /{id}/payment-options` | Card methods and COD eligibility or rejection reason |
+| `POST /{id}/payment` | Select COD or simulate a credit/debit card charge; requires `Idempotency-Key` |
+| `PUT /{id}/status` | Staff lifecycle transitions; dispatch includes `riderId` |
+| `GET /riders` | Approved riders in the manager's branch |
+| `POST /{id}/cod/collect` | Record `cashCollected`; server calculates `changeGiven` |
+| `POST /{id}/delivery-failed` | Record allowed failure reason |
+| `POST /{id}/cancel` | Void or refund before preparation |
+| `POST /claim?orderId=...` | Link one guest order to a signed-in customer, using its guest token |
+| `GET/POST /addresses` | Customer saved addresses |
 
-Order statuses follow an exact sequential pipeline. Any status update that attempts to skip or reverse steps is strictly rejected with an `HTTP 400` error.
+Card body: `{ "method": "CREDIT_CARD", "success": true }` or `{ "method": "DEBIT_CARD", "success": false }`. COD body: `{ "method": "CASH_ON_DELIVERY" }`. Legacy `paymentMethod` and `CARD_STRIPE` remain accepted. Declines return 402 with `{error,message,order}`; other business errors use `{error,message}`. Repeating a payment key returns its saved first response without a second charge.
 
-```
-[PLACED]
-   │
-   ▼
-[PAYMENT_VERIFIED]  (Recorded via POST /api/orders/{id}/payment)
-   │
-   ▼
-[CONFIRMED]
-   │
-   ▼
-[PREPARING] ─── (CANCELLATION LOCKED FROM THIS POINT FORWARD)
-   │
-   ├─ If Fulfillment = DELIVERY:
-   │    │
-   │    ▼
-   │  [OUT_FOR_DELIVERY] ──► [DELIVERED] ──► [COMPLETED]
-   │
-   └─ If Fulfillment = TAKEAWAY:
-        │
-        ▼
-      [READY_FOR_PICKUP] ────────────────► [COMPLETED]
+The mock card form never sends card number, expiry, or CVC to the backend. Payment and refund gateways are mocks; replace their implementations for a production payment integration.
+
+## Data migration
+
+Hibernate currently uses `ddl-auto=update` for the configured MySQL database. New columns and tables must exist before running `backend/db/order_module_v2_backfill.sql`. Back up the database and run the backfill on a local copy first. The script classifies legacy verified card orders, moves old COD states to the nearest supported state, initializes new numeric fields, and adds a single audit baseline for orders without history. It is idempotent but should be applied once as a controlled deployment step. Do not run it against the configured remote database during local development. A legacy cancelled order with a pending refund remains `REFUND_PENDING` for staff reconciliation; the backfill does not issue a refund. Roll back a deployment by restoring the backup and the previous application version.
+
+Legacy guests have no stored nonce or token. Authorized branch staff and admins can still inspect those orders. Support must verify and recover ownership out of band; no phone/email-based self-claim route exists.
+
+## Run and verify
+
+```sh
+cd backend && ./mvnw test
+cd ../frontend && npm install && npm run build
 ```
 
-### Cancellation Policy
-- **Allowed States**: `PLACED`, `PAYMENT_VERIFIED`, and `CONFIRMED`.
-- **Locked States**: `PREPARING`, `READY_FOR_PICKUP`, `OUT_FOR_DELIVERY`, `DELIVERED`, `COMPLETED`.
-- Attempting cancellation when status is `PREPARING` or later throws `IllegalStateException` and returns `400 Bad Request` with an explanatory error message.
-
----
-
-## Mock Services Catalog
-
-Until upstream microservices are merged, mock services simulate operational checks using standardized IDs:
-
-### 1. BranchLookupService
-| Branch ID | Name | Is Open | Supports Takeaway |
-|---|---|---|---|
-| `1` | Colombo Branch | `true` | `true` |
-| `2` | Jaffna Branch | `false` (Closed) | `false` |
-| `3` | Kandy Branch | `true` | `true` |
-
-### 2. MenuLookupService
-| Menu Item ID | Item Name | Unit Price (Rs.) | Branch ID |
-|---|---|---|---|
-| `101` | Margherita Pizza | 1,200.00 | 1 (Colombo) |
-| `102` | Pepperoni Pizza | 1,400.00 | 1 (Colombo) |
-| `103` | Garlic Bread | 450.00 | 1 (Colombo) |
-| `201` | BBQ Chicken Pizza | 1,500.00 | 3 (Kandy) |
-| `202` | Coke 500ml | 250.00 | 3 (Kandy) |
-
-### 3. PromotionValidationService
-- Promo Code `"WELCOME10"`: Validates successfully and applies a **10% discount** off the items subtotal.
-- Any other promo code: Rejected with `"Invalid promo code"`.
-
-### 4. InventoryCheckService
-- `isInStock(menuItemId, quantity)`: Returns `true`.
-- `decrementStock(menuItemId, quantity)`: No-op mock.
-
----
-
-## Backend API Reference
-
-Base URL: `http://localhost:8080/api/orders`
-
-### 1. Place Order
-- **Endpoint**: `POST /api/orders`
-- **Request Body**:
-```json
-{
-  "customerId": null,
-  "guestName": "Customer name ",
-  "guestPhone": "+94771234567",
-  "guestEmail": "name@example.com",
-  "branchId": 1,
-  "fulfillmentType": "DELIVERY",
-  "deliveryAddress": "42 Galle Road, Colombo 03",
-  "promoCode": "WELCOME10",
-  "items": [
-    { "menuItemId": 101, "quantity": 2 },
-    { "menuItemId": 103, "quantity": 1 }
-  ]
-}
-```
-- **Response (201 Created)**: Returns the persisted `OrderResponseDto` with calculated financial breakdown.
-
-### 2. Get Order by ID
-- **Endpoint**: `GET /api/orders/{id}`
-
-### 3. Get Itemized Bill
-- **Endpoint**: `GET /api/orders/{id}/bill`
-- **Response (200 OK)**:
-```json
-{
-  "orderId": 1,
-  "customerId": null,
-  "customerOrGuestName": "John Doe",
-  "branchId": 1,
-  "fulfillmentType": "DELIVERY",
-  "deliveryAddress": "42 Galle Road, Colombo 03",
-  "items": [
-    {
-      "menuItemId": 101,
-      "itemNameSnapshot": "Margherita Pizza",
-      "unitPriceSnapshot": 1200.00,
-      "quantity": 2,
-      "lineTotal": 2400.00
-    },
-    {
-      "menuItemId": 103,
-      "itemNameSnapshot": "Garlic Bread",
-      "unitPriceSnapshot": 450.00,
-      "quantity": 1,
-      "lineTotal": 450.00
-    }
-  ],
-  "subtotal": 2850.00,
-  "deliveryFee": 300.00,
-  "taxRatePercent": 5.00,
-  "taxAmount": 142.50,
-  "promoCode": "WELCOME10",
-  "discountAmount": 285.00,
-  "grandTotal": 3007.50,
-  "paymentStatus": "VERIFIED",
-  "orderStatus": "CONFIRMED",
-  "createdAt": "2026-09-15T14:30:00"
-}
-```
-
-### 4. Record Payment Result (Mock Gateway)
-- **Endpoint**: `POST /api/orders/{id}/payment`
-- **Request Body**:
-```json
-{
-  "success": true
-}
-```
-*When `success: true`, updates `paymentStatus` to `VERIFIED` and advances order status to `PAYMENT_VERIFIED`.*
-
-### 5. Advance Order Status
-- **Endpoint**: `PUT /api/orders/{id}/status`
-- **Request Body**:
-```json
-{
-  "status": "CONFIRMED"
-}
-```
-
-### 6. Cancel Order
-- **Endpoint**: `POST /api/orders/{id}/cancel`
-*Succeeds if status is `PLACED`, `PAYMENT_VERIFIED`, or `CONFIRMED`. Returns 400 if `PREPARING` or later.*
-
-### 7. Filter & List Orders
-- `GET /api/orders?customerId=1` — Retrieve past orders for a customer
-- `GET /api/orders?branchId=1&status=PREPARING` — Filter queue for branch staff
-
----
-
-## Data Models & Schema
-
-### `orders` Table
-| Column | Type | Constraints / Description |
-|---|---|---|
-| `id` | BIGINT | Primary Key, Auto-increment |
-| `customer_id` | BIGINT | Nullable (null indicates guest) |
-| `guest_name` | VARCHAR(255) | Required if `customer_id` is null |
-| `guest_phone` | VARCHAR(255) | Required if `customer_id` is null |
-| `guest_email` | VARCHAR(255) | Optional guest email |
-| `branch_id` | BIGINT | Not null |
-| `fulfillment_type` | VARCHAR(32) | `DELIVERY` or `TAKEAWAY` |
-| `delivery_address` | VARCHAR(500) | Required if `DELIVERY` |
-| `status` | VARCHAR(32) | Default `PLACED` |
-| `subtotal` | DECIMAL(10,2) | Sum of frozen item line totals |
-| `delivery_fee` | DECIMAL(10,2) | 300.00 if `DELIVERY`, else 0.00 |
-| `tax_amount` | DECIMAL(10,2) | 5% of subtotal |
-| `discount_amount` | DECIMAL(10,2) | From promo code calculation |
-| `grandTotal` | DECIMAL(10,2) | `subtotal + deliveryFee + tax - discount` |
-| `promo_code` | VARCHAR(64) | Optional code applied |
-| `payment_status` | VARCHAR(32) | `PENDING`, `VERIFIED`, `FAILED` |
-| `created_at` | DATETIME | Order creation timestamp |
-| `updated_at` | DATETIME | Last update timestamp |
-
-### `order_items` Table
-| Column | Type | Description |
-|---|---|---|
-| `id` | BIGINT | Primary Key, Auto-increment |
-| `order_id` | BIGINT | Foreign Key referencing `orders.id` |
-| `menu_item_id` | BIGINT | Menu item ID reference |
-| `item_name_snapshot`| VARCHAR(255) | Snapshotted name at order time |
-| `unit_price_snapshot`| DECIMAL(10,2)| Snapshotted unit price at order time |
-| `quantity` | INT | Quantity ordered |
-| `line_total` | DECIMAL(10,2)| `unitPriceSnapshot * quantity` |
-
----
-
-## Business Rules & Financial Precision
-
-### 1. Currency & Rounding Specification
-- **Currency**: Sri Lankan Rupee (`LKR` / `Rs.`).
-- **Precision**: All financial calculations (`subtotal`, `deliveryFee`, `taxAmount`, `discountAmount`, `grandTotal`, `unitPriceSnapshot`, and `lineTotal`) are strictly evaluated using `java.math.BigDecimal` fixed at **2 decimal places (`scale = 2`)**.
-- **Rounding Mode**: All intermediate calculations and final totals use **`RoundingMode.HALF_UP`** (standard commercial / banking rounding):
-  $$\text{Value} = \text{roundTo}(\text{val}, 2, \text{HALF\_UP})$$
-  This deliberate design ensures deterministic arithmetic across financial reports, eliminates IEEE-754 floating-point inaccuracies, and prevents currency drift between order creation, item modification, and invoice generation.
-
-### 2. Tax & Surcharge Rules
-- **Tax Rate**: 5.00% standard sales tax (`TAX_RATE = 0.05`), calculated as:
-  $$\text{taxAmount} = \text{subtotal} \times 0.05 \quad (\text{scale } 2, \text{HALF\_UP})$$
-- **Delivery Surcharge**: Flat LKR 300.00 for `DELIVERY` fulfillment; LKR 0.00 for `TAKEAWAY`.
-- **Grand Total Invariant**:
-  $$\text{grandTotal} = \max(0, \text{subtotal} + \text{deliveryFee} + \text{taxAmount} - \text{discountAmount})$$
-
-### 3. Cart & Order Constraints
-- **Minimum Order Value**: LKR 500.00 minimum subtotal required to place an order.
-- **Max Distinct Items**: Up to 20 distinct menu items per order.
-- **Max Item Quantity**: Maximum 50 units per line item.
-- **Idempotency Guard**: Client submits UUID `idempotencyKey`; duplicate requests return existing order without double-charging or creating duplicate database rows.
-- **Concurrency Guard**: Optimistic locking via JPA `@Version` column returns `409 Conflict` if concurrent staff or processes attempt overlapping state mutations.
-- **Timeout / Abandonment Auto-Cancel**: Background `@Scheduled` job detects `status = PLACED` & `paymentStatus = PENDING` orders older than 15 minutes and transitions them to `CANCELLED` (reason: `TIMEOUT`).
-
----
-
-## Frontend Architecture & Routes
-
-| Route | Component | Description |
-|---|---|---|
-| `/` | `BranchSelectPage` | Cards for Colombo, Jaffna (closed), and Kandy with quick status badges. |
-| `/branch/:branchId/menu` | `MenuPage` | Displays items scoped to selected branch with add/remove quantity selectors and sticky cart drawer. |
-| `/cart` | `CartPage` | Cart item management, fulfillment toggle (Delivery vs Takeaway), delivery address, and `WELCOME10` promo code input. |
-| `/checkout` | `CheckoutPage` | Toggle between Guest checkout and Customer #1 login, address confirmation, and final submission. |
-| `/order/:orderId/payment` | `PaymentPage` | Mock gateway with simulated Success and Failure triggers. |
-| `/order/:orderId` | `OrderStatusPage` | Live horizontal stepper tracker, itemized bill breakdown, and cancellation button (locked after preparation). |
-| `/orders` | `OrderHistoryPage` | Customer order list with history tracking and quick links. |
-| `/staff/orders` | `StaffOrderListPage` | Interactive staff console to filter orders by branch and advance orders sequentially along the pipeline. |
-
----
-
-## Getting Started & Setup
-
-### 1. Run the Backend (Spring Boot)
-```bash
-cd backend
-./mvnw spring-boot:run
-```
-*API runs on `http://localhost:8080`.*
-
-### 2. Run the Frontend (React + Vite)
-```bash
-cd frontend
-npm install
-npm run dev
-```
-*Frontend runs on `http://localhost:3000` with `/api` proxying to `http://localhost:8080`.*
-
----
-
-## Automated Tests & Quality Gates
-
-Run the comprehensive unit test suite:
-```bash
-cd backend
-./mvnw test -Dtest=OrderServiceTest
-```
-
-**Verified Test Scenarios**:
-- `testCancellationRejectedWhenPreparingOrLater`: Verifies orders cannot be cancelled once `PREPARING`, `READY_FOR_PICKUP`, `OUT_FOR_DELIVERY`, or `COMPLETED`.
-- `testOrderPlacementRejectedWhenBranchClosed`: Verifies closed branches (e.g. Jaffna) reject order placement.
-- `testOrderPlacementRejectedWhenTakeawayNotSupported`: Verifies takeaway cannot be requested for branches without takeaway support.
-- `testGuestOrderRejectedWithoutNameOrPhone`: Verifies guest orders must provide both name and phone.
-- `testPromoCodeWelcome10AppliesTenPercent`: Verifies `WELCOME10` calculates 10% off and invalid codes are discarded.
-- `testBillTotalMathIsCorrect`: Verifies multi-item bill arithmetic (`subtotal + delivery fee + 5% tax - discount = grandTotal`).
-- `testStatusTransitionValidation`: Verifies status transitions must follow the exact pipeline.
-- `testRecordPaymentSuccess`: Verifies payment verification transitions order status to `PAYMENT_VERIFIED`.
-
-Run the frontend type check & production build:
-```bash
-cd frontend
-npm run build
-```
-
----
-
-## End-to-End Verification Guide
-
-### Quick Test via UI:
-1. Open `http://localhost:3000` in your browser.
-2. Select **Colombo Branch** (Branch 1).
-3. Add **Margherita Pizza** and **Garlic Bread** to the cart.
-4. Click **View Cart**, enter promo code `WELCOME10`, click **Apply** (10% discount applied).
-5. Choose **Delivery**, enter a delivery address, and proceed to **Checkout**.
-6. Enter your Guest Name and Phone, click **Place Order Now**.
-7. On the **Mock Payment Gateway**, click **Simulate Payment Success**.
-8. View the **Live Status Tracker** at `/order/:id` with the horizontal stepper.
-9. Open `/staff/orders` in a new tab to see your order appear in real-time, and advance it to **Confirm Order** and **Start Preparing**.
-10. Return to the customer status page: note that the **Cancel Order** button is now disabled/locked because preparation has started!
+Backend tests use H2. The frontend uses the Vite `/api` proxy for local development. Configure backend database and JWT settings through environment variables before starting the app. The mock menu and branch providers include branches 1 and 3 as open, with COD enabled; branch 2 is closed.

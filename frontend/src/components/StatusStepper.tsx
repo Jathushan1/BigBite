@@ -30,22 +30,20 @@ const CARD_TAKEAWAY_STEPS: { key: OrderStatus; label: string }[] = [
 ]
 
 const COD_DELIVERY_STEPS: { key: OrderStatus; label: string }[] = [
-  { key: 'PLACED', label: 'Placed (Awaiting BM)' },
+  { key: 'PLACED', label: 'Placed' },
   { key: 'CONFIRMED', label: 'Confirmed' },
   { key: 'PREPARING', label: 'Preparing' },
   { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery' },
-  { key: 'DELIVERED', label: 'Delivered' },
-  { key: 'PAYMENT_VERIFIED', label: 'Payment Received' },
+  { key: 'DELIVERED', label: 'Delivered & Paid' },
   { key: 'COMPLETED', label: 'Completed' },
 ]
 
 const COD_TAKEAWAY_STEPS: { key: OrderStatus; label: string }[] = [
-  { key: 'PLACED', label: 'Placed (Awaiting BM)' },
+  { key: 'PLACED', label: 'Placed' },
   { key: 'CONFIRMED', label: 'Confirmed' },
   { key: 'PREPARING', label: 'Preparing' },
   { key: 'READY_FOR_PICKUP', label: 'Ready for Pickup' },
-  { key: 'PAYMENT_VERIFIED', label: 'Payment Received' },
-  { key: 'COMPLETED', label: 'Completed' },
+  { key: 'COMPLETED', label: 'Collected & Paid' },
 ]
 
 export function StatusStepper({ currentStatus, fulfillmentType, paymentMethod }: StatusStepperProps) {
@@ -68,6 +66,18 @@ export function StatusStepper({ currentStatus, fulfillmentType, paymentMethod }:
           <p className="text-xs text-muted-foreground mt-0.5">
             This order has been cancelled and is no longer being processed.
           </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (currentStatus === 'DELIVERY_FAILED') {
+    return (
+      <div className="p-4 rounded-2xl bg-destructive/10 border border-destructive/30 flex items-center gap-3 text-destructive">
+        <XCircle className="w-6 h-6 shrink-0" />
+        <div>
+          <h4 className="font-bold text-sm">Delivery Failed</h4>
+          <p className="text-xs text-muted-foreground mt-0.5">The branch will follow up about this delivery.</p>
         </div>
       </div>
     )

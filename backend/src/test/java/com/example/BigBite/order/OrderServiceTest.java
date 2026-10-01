@@ -10,11 +10,15 @@ import com.example.BigBite.order.external.BranchLookupService;
 import com.example.BigBite.order.external.InventoryCheckService;
 import com.example.BigBite.order.external.MenuLookupService;
 import com.example.BigBite.order.external.PromotionValidationService;
+import com.example.BigBite.order.external.PaymentGateway;
+import com.example.BigBite.order.external.RefundGateway;
+import com.example.BigBite.auth.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Answers;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -43,14 +47,44 @@ class OrderServiceTest {
     @Mock
     private MenuLookupService menuLookupService;
 
-    @Mock
+    @Mock(answer = Answers.CALLS_REAL_METHODS)
     private PromotionValidationService promotionValidationService;
 
-    @Mock
+    @Mock(answer = Answers.CALLS_REAL_METHODS)
     private InventoryCheckService inventoryCheckService;
 
     @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private OrderAccessGuard accessGuard;
+
+    @Mock
     private SavedAddressRepository savedAddressRepository;
+
+    @Mock
+    private GuestTokenService guestTokenService;
+
+    @Mock
+    private OrderStatusHistoryRepository historyRepository;
+
+    @Mock
+    private PaymentAttemptRepository paymentAttemptRepository;
+
+    @Mock
+    private PaymentGateway paymentGateway;
+
+    @Mock
+    private RefundGateway refundGateway;
+
+    @Mock
+    private CodEligibilityService codEligibilityService;
+
+    @Mock
+    private OrderTransitionGuard transitionGuard;
+
+    @Mock
+    private UserRepository userRepository;
 
     @InjectMocks
     private OrderService orderService;
@@ -65,8 +99,8 @@ class OrderServiceTest {
 
         when(orderRepository.findById(1L)).thenReturn(Optional.of(orderPreparing));
 
-        IllegalStateException ex1 = assertThrows(IllegalStateException.class, () -> orderService.cancelOrder(1L));
-        assertTrue(ex1.getMessage().contains("Cannot cancel order once preparation has started"));
+        OrderApiException ex1 = assertThrows(OrderApiException.class, () -> orderService.cancelOrder(1L, null, null));
+        assertTrue(ex1.getMessage().contains("Order can no longer be cancelled"));
 
         // Test for OUT_FOR_DELIVERY
         Order orderDelivery = new Order();
@@ -75,8 +109,8 @@ class OrderServiceTest {
 
         when(orderRepository.findById(2L)).thenReturn(Optional.of(orderDelivery));
 
-        IllegalStateException ex2 = assertThrows(IllegalStateException.class, () -> orderService.cancelOrder(2L));
-        assertTrue(ex2.getMessage().contains("Cannot cancel order once preparation has started"));
+        OrderApiException ex2 = assertThrows(OrderApiException.class, () -> orderService.cancelOrder(2L, null, null));
+        assertTrue(ex2.getMessage().contains("Order can no longer be cancelled"));
 
         // Test for READY_FOR_PICKUP
         Order orderPickup = new Order();
@@ -85,8 +119,8 @@ class OrderServiceTest {
 
         when(orderRepository.findById(3L)).thenReturn(Optional.of(orderPickup));
 
-        IllegalStateException ex3 = assertThrows(IllegalStateException.class, () -> orderService.cancelOrder(3L));
-        assertTrue(ex3.getMessage().contains("Cannot cancel order once preparation has started"));
+        OrderApiException ex3 = assertThrows(OrderApiException.class, () -> orderService.cancelOrder(3L, null, null));
+        assertTrue(ex3.getMessage().contains("Order can no longer be cancelled"));
     }
 
     @Test
@@ -161,7 +195,7 @@ class OrderServiceTest {
     }
 
     @Test
-    @DisplayName("Promo code WELCOME10 correctly discounts 10%, invalid code returns valid=false and does not change total")
+    @DisplayName("Promo code WELCOME10 discounts 10%, invalid code is rejected")
     void testPromoCodeWelcome10AppliesTenPercent() {
         OrderRequestDto request = new OrderRequestDto();
         request.setBranchId(1L);
@@ -200,15 +234,13 @@ class OrderServiceTest {
         assertEquals(new BigDecimal("2280.00"), response.getGrandTotal());
         assertEquals("WELCOME10", response.getPromoCode());
 
-        // Test invalid promo code does not apply discount
+        // Invalid promo codes are rejected before an order is saved.
         request.setPromoCode("INVALID_CODE");
         when(promotionValidationService.validate(eq("INVALID_CODE"), any(BigDecimal.class)))
                 .thenReturn(new PromotionValidationService.DiscountResult(false, BigDecimal.ZERO, "Invalid promo code"));
 
-        OrderResponseDto response2 = orderService.placeOrder(request);
-        assertEquals(new BigDecimal("0.00"), response2.getDiscountAmount());
-        // Grand total = 2400 + 0 + 120 - 0 = 2520.00
-        assertEquals(new BigDecimal("2520.00"), response2.getGrandTotal());
+        OrderApiException error = assertThrows(OrderApiException.class, () -> orderService.placeOrder(request));
+        assertEquals("INVALID_PROMO", error.getCode());
     }
 
     @Test
@@ -286,27 +318,6 @@ class OrderServiceTest {
     }
 
     @Test
-    @DisplayName("Status transition follows strict pipeline and rejects invalid leaps")
-    void testStatusTransitionValidation() {
-        Order order = new Order();
-        order.setId(10L);
-        order.setStatus(OrderStatus.PLACED);
-        order.setFulfillmentType(FulfillmentType.DELIVERY);
-
-        when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
-
-        // PLACED -> PREPARING should fail (cannot skip PAYMENT_VERIFIED and CONFIRMED)
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                orderService.updateOrderStatus(10L, OrderStatus.PREPARING));
-        assertTrue(ex.getMessage().contains("Invalid status transition"));
-
-        // PLACED -> PAYMENT_VERIFIED should succeed
-        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        OrderResponseDto updated = orderService.updateOrderStatus(10L, OrderStatus.PAYMENT_VERIFIED);
-        assertEquals(OrderStatus.PAYMENT_VERIFIED, updated.getStatus());
-    }
-
-    @Test
     @DisplayName("Payment endpoint records payment and transitions status to PAYMENT_VERIFIED")
     void testRecordPaymentSuccess() {
         Order order = new Order();
@@ -314,13 +325,15 @@ class OrderServiceTest {
         order.setStatus(OrderStatus.PLACED);
         order.setPaymentStatus(PaymentStatus.PENDING);
 
-        when(orderRepository.findById(15L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(15L)).thenReturn(Optional.of(order));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentGateway.charge(any(BigDecimal.class), eq(true), anyString()))
+                .thenReturn(new PaymentGateway.GatewayResult(true, "MOCK-CARD-15"));
 
         OrderResponseDto response = orderService.recordPayment(15L, true);
 
         assertEquals(PaymentStatus.VERIFIED, response.getPaymentStatus());
-        assertEquals(OrderStatus.CONFIRMED, response.getStatus());
+        assertEquals(OrderStatus.PAYMENT_VERIFIED, response.getStatus());
 
         // Test payment failure
         Order order2 = new Order();
@@ -328,7 +341,9 @@ class OrderServiceTest {
         order2.setStatus(OrderStatus.PLACED);
         order2.setPaymentStatus(PaymentStatus.PENDING);
 
-        when(orderRepository.findById(16L)).thenReturn(Optional.of(order2));
+        when(orderRepository.findByIdForUpdate(16L)).thenReturn(Optional.of(order2));
+        when(paymentGateway.charge(any(BigDecimal.class), eq(false), anyString()))
+                .thenReturn(new PaymentGateway.GatewayResult(false, null));
 
         OrderResponseDto failResponse = orderService.recordPayment(16L, false);
         assertEquals(PaymentStatus.FAILED, failResponse.getPaymentStatus());
@@ -336,7 +351,7 @@ class OrderServiceTest {
     }
 
     @Test
-    @DisplayName("Cash on delivery succeeds under 3000 limit and fails when exceeding 3000")
+    @DisplayName("Cash on delivery bypasses payment verification and confirms the order")
     void testCodPaymentLimit() {
         // Order under 3000
         Order orderUnder = new Order();
@@ -345,74 +360,17 @@ class OrderServiceTest {
         orderUnder.setGrandTotal(new BigDecimal("2500.00"));
         orderUnder.setPaymentStatus(PaymentStatus.PENDING);
 
-        when(orderRepository.findById(20L)).thenReturn(Optional.of(orderUnder));
+        when(orderRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(orderUnder));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         PaymentRequestDto codReq = new PaymentRequestDto(PaymentMethod.CASH_ON_DELIVERY, true);
         OrderResponseDto response = orderService.recordPayment(20L, codReq);
 
-        assertEquals(OrderStatus.PLACED, response.getStatus());
+        assertEquals(OrderStatus.CONFIRMED, response.getStatus());
         assertEquals(PaymentStatus.PENDING, response.getPaymentStatus());
         assertEquals(PaymentMethod.CASH_ON_DELIVERY, response.getPaymentMethod());
 
-        // Order over 3000
-        Order orderOver = new Order();
-        orderOver.setId(21L);
-        orderOver.setStatus(OrderStatus.PLACED);
-        orderOver.setGrandTotal(new BigDecimal("3500.00"));
-        orderOver.setPaymentStatus(PaymentStatus.PENDING);
-
-        when(orderRepository.findById(21L)).thenReturn(Optional.of(orderOver));
-
-        assertThrows(IllegalArgumentException.class, () -> orderService.recordPayment(21L, codReq));
-    }
-
-    @Test
-    @DisplayName("Cash on delivery complete lifecycle: PLACED -> CONFIRMED -> PREPARING -> OUT_FOR_DELIVERY -> DELIVERED -> PAYMENT_VERIFIED -> COMPLETED")
-    void testCodOrderLifecycleWorkflow() {
-        Order codOrder = new Order();
-        codOrder.setId(30L);
-        codOrder.setStatus(OrderStatus.PLACED);
-        codOrder.setPaymentMethod(PaymentMethod.CASH_ON_DELIVERY);
-        codOrder.setPaymentStatus(PaymentStatus.PENDING);
-        codOrder.setFulfillmentType(FulfillmentType.DELIVERY);
-        codOrder.setGrandTotal(new BigDecimal("1800.00"));
-
-        when(orderRepository.findById(30L)).thenReturn(Optional.of(codOrder));
-        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        // 1. Branch Manager approves COD order: PLACED -> CONFIRMED
-        OrderResponseDto confirmed = orderService.updateOrderStatus(30L, OrderStatus.CONFIRMED);
-        assertEquals(OrderStatus.CONFIRMED, confirmed.getStatus());
-        assertEquals(PaymentStatus.PENDING, confirmed.getPaymentStatus());
-
-        // 2. Kitchen starts preparing: CONFIRMED -> PREPARING
-        OrderResponseDto preparing = orderService.updateOrderStatus(30L, OrderStatus.PREPARING);
-        assertEquals(OrderStatus.PREPARING, preparing.getStatus());
-
-        // 3. Dispatched: PREPARING -> OUT_FOR_DELIVERY
-        OrderResponseDto outForDelivery = orderService.updateOrderStatus(30L, OrderStatus.OUT_FOR_DELIVERY);
-        assertEquals(OrderStatus.OUT_FOR_DELIVERY, outForDelivery.getStatus());
-
-        // 4. Delivery partner arrives: OUT_FOR_DELIVERY -> DELIVERED
-        OrderResponseDto delivered = orderService.updateOrderStatus(30L, OrderStatus.DELIVERED);
-        assertEquals(OrderStatus.DELIVERED, delivered.getStatus());
-        assertEquals(PaymentStatus.PENDING, delivered.getPaymentStatus());
-
-        // 5. Cannot complete directly before verifying payment
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                orderService.updateOrderStatus(30L, OrderStatus.COMPLETED));
-        assertTrue(ex.getMessage().contains("Invalid status transition"));
-
-        // 6. Cash received and verified: DELIVERED -> PAYMENT_VERIFIED
-        OrderResponseDto verified = orderService.updateOrderStatus(30L, OrderStatus.PAYMENT_VERIFIED);
-        assertEquals(OrderStatus.PAYMENT_VERIFIED, verified.getStatus());
-        assertEquals(PaymentStatus.VERIFIED, verified.getPaymentStatus());
-
-        // 7. Delivery partner marks completed: PAYMENT_VERIFIED -> COMPLETED
-        OrderResponseDto completed = orderService.updateOrderStatus(30L, OrderStatus.COMPLETED);
-        assertEquals(OrderStatus.COMPLETED, completed.getStatus());
-        assertEquals(PaymentStatus.VERIFIED, completed.getPaymentStatus());
+        verify(codEligibilityService).requireEligible(orderUnder);
     }
 
     @Test
@@ -512,6 +470,7 @@ class OrderServiceTest {
 
         Order existingOrder = new Order();
         existingOrder.setId(555L);
+        existingOrder.setCustomerId(99L);
         existingOrder.setIdempotencyKey(key);
         existingOrder.setBranchId(1L);
         existingOrder.setFulfillmentType(FulfillmentType.TAKEAWAY);
@@ -583,6 +542,7 @@ class OrderServiceTest {
         when(orderRepository.save(any(Order.class))).thenAnswer(i -> i.getArgument(0));
 
         // Change item1 qty from 1 to 2
+        when(inventoryCheckService.isInStock(101L, 1)).thenReturn(true);
         OrderResponseDto response = orderService.updateOrderItem(10L, 1L, 2);
 
         assertNotNull(response);
@@ -599,7 +559,7 @@ class OrderServiceTest {
     void testUpdateOrderItem_RemoveItem_RecalculatesTotals() {
         Order order = new Order();
         order.setId(10L);
-        order.setStatus(OrderStatus.CONFIRMED);
+        order.setStatus(OrderStatus.PLACED);
         order.setDeliveryFee(BigDecimal.ZERO);
         order.setDiscountAmount(BigDecimal.ZERO);
 
@@ -637,9 +597,9 @@ class OrderServiceTest {
 
         when(orderRepository.findById(10L)).thenReturn(Optional.of(order));
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class,
+        OrderApiException ex = assertThrows(OrderApiException.class,
                 () -> orderService.updateOrderItem(10L, 1L, 2));
-        assertTrue(ex.getMessage().contains("Cannot modify order items once preparation has started"));
+        assertTrue(ex.getMessage().contains("only be edited before payment"));
     }
 
     @Test
@@ -672,12 +632,15 @@ class OrderServiceTest {
 
         when(orderRepository.findById(20L)).thenReturn(Optional.of(order));
         when(orderRepository.save(any(Order.class))).thenAnswer(i -> i.getArgument(0));
+        when(refundGateway.refund(any(), any())).thenReturn(new RefundGateway.RefundResult(true, "MOCK-REFUND"));
 
-        OrderResponseDto response = orderService.cancelOrder(20L);
+        OrderResponseDto response = orderService.cancelOrder(20L, null, null);
 
         assertNotNull(response);
         assertEquals(OrderStatus.CANCELLED, response.getStatus());
-        assertEquals(RefundStatus.PENDING, response.getRefundStatus());
+        assertEquals(RefundStatus.PROCESSED, response.getRefundStatus());
+        assertEquals(PaymentStatus.REFUNDED, response.getPaymentStatus());
+        verify(eventPublisher).publishEvent(any(com.example.BigBite.order.event.OrderEvents.Cancelled.class));
     }
 
     @Test
@@ -692,52 +655,11 @@ class OrderServiceTest {
         when(orderRepository.findById(21L)).thenReturn(Optional.of(order));
         when(orderRepository.save(any(Order.class))).thenAnswer(i -> i.getArgument(0));
 
-        OrderResponseDto response = orderService.cancelOrder(21L);
+        OrderResponseDto response = orderService.cancelOrder(21L, null, null);
 
         assertNotNull(response);
         assertEquals(OrderStatus.CANCELLED, response.getStatus());
         assertEquals(RefundStatus.NOT_APPLICABLE, response.getRefundStatus());
-    }
-
-    @Test
-    @DisplayName("Claim guest orders successfully links matching orders to customer")
-    void testClaimGuestOrders_Success() {
-        Order guestOrder1 = new Order();
-        guestOrder1.setId(101L);
-        guestOrder1.setCustomerId(null);
-        guestOrder1.setGuestEmail("john@example.com");
-
-        Order guestOrder2 = new Order();
-        guestOrder2.setId(102L);
-        guestOrder2.setCustomerId(null);
-        guestOrder2.setGuestPhone("0771234567");
-
-        when(orderRepository.findUnclaimedGuestOrders("john@example.com", "0771234567"))
-                .thenReturn(List.of(guestOrder1, guestOrder2));
-
-        ClaimOrdersResponseDto response = orderService.claimGuestOrders(55L, "john@example.com", "0771234567");
-
-        assertNotNull(response);
-        assertEquals(2, response.getClaimedCount());
-        assertEquals(List.of(101L, 102L), response.getClaimedOrderIds());
-        assertEquals(55L, guestOrder1.getCustomerId());
-        assertEquals(55L, guestOrder2.getCustomerId());
-        verify(orderRepository).saveAll(anyList());
-    }
-
-    @Test
-    @DisplayName("Claim guest orders with no matches returns 0 claimed count")
-    void testClaimGuestOrders_NoMatches() {
-        when(orderRepository.findUnclaimedGuestOrders("unknown@example.com", "0770000000"))
-                .thenReturn(List.of());
-
-        ClaimOrdersResponseDto response = orderService.claimGuestOrders(55L, "unknown@example.com", "0770000000");
-
-        assertNotNull(response);
-        assertEquals(0, response.getClaimedCount());
-        assertTrue(response.getClaimedOrderIds().isEmpty());
-        assertTrue(response.getMessage().contains("No unclaimed guest orders found"));
-        verify(orderRepository, never()).saveAll(anyList());
     }
 
     @Test
@@ -769,11 +691,13 @@ class OrderServiceTest {
         abandoned2.setStatus(OrderStatus.PLACED);
         abandoned2.setPaymentStatus(PaymentStatus.PENDING);
 
-        when(orderRepository.findByStatusAndPaymentStatusAndCreatedAtBefore(
+        when(orderRepository.findAbandonedCardOrders(
                 eq(OrderStatus.PLACED),
-                eq(PaymentStatus.PENDING),
+                eq(List.of(PaymentStatus.PENDING, PaymentStatus.FAILED)),
+                eq(PaymentMethod.CASH_ON_DELIVERY),
                 any(LocalDateTime.class)
         )).thenReturn(List.of(abandoned1, abandoned2));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         int cancelledCount = orderService.autoCancelAbandonedOrders(15);
 
@@ -782,22 +706,23 @@ class OrderServiceTest {
         assertEquals("TIMEOUT", abandoned1.getCancellationReason());
         assertEquals(OrderStatus.CANCELLED, abandoned2.getStatus());
         assertEquals("TIMEOUT", abandoned2.getCancellationReason());
-        verify(orderRepository).saveAll(anyList());
+        verify(orderRepository, times(2)).save(any(Order.class));
     }
 
     @Test
     @DisplayName("autoCancelAbandonedOrders with no matches does not save anything")
     void testAutoCancelAbandonedOrders_NoMatches() {
-        when(orderRepository.findByStatusAndPaymentStatusAndCreatedAtBefore(
+        when(orderRepository.findAbandonedCardOrders(
                 eq(OrderStatus.PLACED),
-                eq(PaymentStatus.PENDING),
+                eq(List.of(PaymentStatus.PENDING, PaymentStatus.FAILED)),
+                eq(PaymentMethod.CASH_ON_DELIVERY),
                 any(LocalDateTime.class)
         )).thenReturn(List.of());
 
         int cancelledCount = orderService.autoCancelAbandonedOrders(15);
 
         assertEquals(0, cancelledCount);
-        verify(orderRepository, never()).saveAll(anyList());
+        verify(orderRepository, never()).save(any(Order.class));
     }
 
     @Test
@@ -817,7 +742,6 @@ class OrderServiceTest {
         when(menuLookupService.getItem(201L))
                 .thenReturn(new MenuLookupService.MenuItemInfo(201L, "Soft Drink", new BigDecimal("300.00"), 1L));
         when(menuLookupService.isAvailable(201L)).thenReturn(true);
-        when(inventoryCheckService.isInStock(201L, 1)).thenReturn(true);
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> orderService.placeOrder(request));
         assertTrue(ex.getMessage().contains("Minimum order subtotal is LKR 500.00"));
@@ -877,8 +801,110 @@ class OrderServiceTest {
                 () -> orderService.updateOrderItem(10L, 1L, 51));
         assertTrue(ex.getMessage().contains("Quantity cannot exceed maximum limit of 50"));
     }
+
+    @Test
+    @DisplayName("Repeating a payment key returns its original result without another charge")
+    void paymentKeyReturnsOriginalSnapshot() {
+        Order order = new Order();
+        order.setId(90L);
+        order.setStatus(OrderStatus.PLACED);
+        order.setPaymentStatus(PaymentStatus.PENDING);
+        order.setGrandTotal(new BigDecimal("1260.00"));
+        when(orderRepository.findByIdForUpdate(90L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(i -> i.getArgument(0));
+        when(paymentGateway.charge(new BigDecimal("1260.00"), true, "payment-key"))
+                .thenReturn(new PaymentGateway.GatewayResult(true, "MOCK-90"));
+        java.util.concurrent.atomic.AtomicReference<PaymentAttempt> attempt = new java.util.concurrent.atomic.AtomicReference<>();
+        when(paymentAttemptRepository.findByIdempotencyKey("payment-key"))
+                .thenAnswer(i -> Optional.ofNullable(attempt.get()));
+        when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(i -> {
+            attempt.set(i.getArgument(0));
+            return i.getArgument(0);
+        });
+
+        PaymentRequestDto request = new PaymentRequestDto(PaymentMethod.CREDIT_CARD, true);
+        OrderService.PaymentResult first = orderService.recordPayment(90L, request, "payment-key");
+        assertEquals(OrderStatus.PAYMENT_VERIFIED, first.order().getStatus());
+        order.setStatus(OrderStatus.CONFIRMED);
+        OrderService.PaymentResult retry = orderService.recordPayment(90L, request, "payment-key");
+        assertEquals(OrderStatus.PAYMENT_VERIFIED, retry.order().getStatus());
+        assertEquals("MOCK-90", retry.order().getPaymentReference());
+        verify(paymentGateway, times(1)).charge(any(), anyBoolean(), anyString());
+    }
+
+    @Test
+    @DisplayName("Third declined card attempt voids and cancels the order")
+    void thirdDeclineCancelsOrder() {
+        Order order = new Order();
+        order.setId(91L);
+        order.setStatus(OrderStatus.PLACED);
+        order.setPaymentStatus(PaymentStatus.PENDING);
+        order.setGrandTotal(new BigDecimal("1260.00"));
+        when(orderRepository.findByIdForUpdate(91L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(i -> i.getArgument(0));
+        when(paymentGateway.charge(any(), eq(false), anyString()))
+                .thenReturn(new PaymentGateway.GatewayResult(false, null));
+        PaymentRequestDto request = new PaymentRequestDto(PaymentMethod.DEBIT_CARD, false);
+
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            OrderService.PaymentResult result = orderService.recordPayment(91L, request, "decline-" + attempt);
+            assertEquals(402, result.httpStatus());
+        }
+        assertEquals(3, order.getPaymentAttempts());
+        assertEquals(OrderStatus.CANCELLED, order.getStatus());
+        assertEquals(PaymentStatus.VOIDED, order.getPaymentStatus());
+        assertEquals("PAYMENT_FAILED", order.getCancellationReason());
+    }
+
+    @Test
+    @DisplayName("COD collection records exact cash and change before delivery")
+    void cashCollectionCompletesHandover() {
+        Order order = new Order();
+        order.setId(92L);
+        order.setBranchId(1L);
+        order.setStatus(OrderStatus.OUT_FOR_DELIVERY);
+        order.setFulfillmentType(FulfillmentType.DELIVERY);
+        order.setPaymentMethod(PaymentMethod.CASH_ON_DELIVERY);
+        order.setPaymentStatus(PaymentStatus.PENDING);
+        order.setGrandTotal(new BigDecimal("3007.50"));
+        when(orderRepository.findById(92L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(i -> i.getArgument(0));
+        com.example.BigBite.auth.User rider = new com.example.BigBite.auth.User();
+        rider.setId(7L);
+        rider.setRole(com.example.BigBite.auth.Role.DELIVERY_PARTNER);
+
+        OrderResponseDto result = orderService.collectCod(92L, new BigDecimal("3500.00"), rider);
+        assertEquals(OrderStatus.DELIVERED, result.getStatus());
+        assertEquals(PaymentStatus.VERIFIED, result.getPaymentStatus());
+        assertEquals(new BigDecimal("492.50"), result.getChangeGiven());
+        verify(historyRepository).save(any(OrderStatusHistory.class));
+    }
+
+    @Test
+    @DisplayName("Failed COD delivery records a strike while card remains paid")
+    void deliveryFailureTracksCodButDoesNotRefundCard() {
+        Order cod = new Order();
+        cod.setId(93L);
+        cod.setStatus(OrderStatus.OUT_FOR_DELIVERY);
+        cod.setPaymentMethod(PaymentMethod.CASH_ON_DELIVERY);
+        cod.setPaymentStatus(PaymentStatus.PENDING);
+        Order card = new Order();
+        card.setId(94L);
+        card.setStatus(OrderStatus.OUT_FOR_DELIVERY);
+        card.setPaymentMethod(PaymentMethod.CREDIT_CARD);
+        card.setPaymentStatus(PaymentStatus.VERIFIED);
+        when(orderRepository.findById(93L)).thenReturn(Optional.of(cod));
+        when(orderRepository.findById(94L)).thenReturn(Optional.of(card));
+        when(orderRepository.save(any(Order.class))).thenAnswer(i -> i.getArgument(0));
+        com.example.BigBite.auth.User rider = new com.example.BigBite.auth.User();
+        rider.setId(7L);
+        rider.setRole(com.example.BigBite.auth.Role.DELIVERY_PARTNER);
+
+        orderService.markDeliveryFailed(93L, "CUSTOMER_UNREACHABLE", rider);
+        orderService.markDeliveryFailed(94L, "REFUSED", rider);
+        assertEquals(OrderStatus.DELIVERY_FAILED, cod.getStatus());
+        assertEquals(PaymentStatus.FAILED, cod.getPaymentStatus());
+        assertEquals(PaymentStatus.VERIFIED, card.getPaymentStatus());
+        verify(eventPublisher, times(2)).publishEvent(any(com.example.BigBite.order.event.OrderEvents.DeliveryFailed.class));
+    }
 }
-
-
-
-

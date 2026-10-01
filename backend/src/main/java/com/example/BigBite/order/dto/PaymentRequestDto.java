@@ -1,9 +1,11 @@
 package com.example.BigBite.order.dto;
 
 import com.example.BigBite.order.PaymentMethod;
+import com.fasterxml.jackson.annotation.JsonAlias;
 
 public class PaymentRequestDto {
 
+    @JsonAlias("method")
     private PaymentMethod paymentMethod = PaymentMethod.CARD_STRIPE;
     private String stripePaymentIntentId;
     private boolean success = true;

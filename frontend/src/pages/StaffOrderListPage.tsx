@@ -10,14 +10,17 @@ import {
   Phone,
   User,
 } from 'lucide-react'
-import { getOrders, updateOrderStatus } from '../api/orderApi'
+import { getOrders, updateOrderStatus, getBranchRiders, collectCod, markDeliveryFailed } from '../api/orderApi'
 import type { OrderResponse, OrderStatus } from '../types/order'
+import type { User as AuthUser } from '../types/auth'
 import { MOCK_BRANCHES } from '../mocks/orderMockData'
 import { useAuth } from '../context/AuthContext'
 import { ResponsiveDataView, type ColumnDef } from '../components/ResponsiveDataView'
 import { StatusBadge } from '../components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/sonner'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 
 export function StaffOrderListPage() {
   const { user } = useAuth()
@@ -26,6 +29,12 @@ export function StaffOrderListPage() {
   const [orders, setOrders] = useState<OrderResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [updatingId, setUpdatingId] = useState<number | null>(null)
+  const [actionOrder, setActionOrder] = useState<OrderResponse | null>(null)
+  const [actionKind, setActionKind] = useState<'dispatch' | 'collect' | 'failed' | null>(null)
+  const [riders, setRiders] = useState<AuthUser[]>([])
+  const [selectedRiderId, setSelectedRiderId] = useState('')
+  const [cashCollected, setCashCollected] = useState('')
+  const [failureReason, setFailureReason] = useState('CUSTOMER_UNREACHABLE')
 
   const loadOrders = async () => {
     try {
@@ -62,21 +71,35 @@ export function StaffOrderListPage() {
     return () => clearInterval(interval)
   }, [selectedBranch, selectedStatus])
 
-  const handleAdvanceStatus = async (orderId: number, nextStatus: OrderStatus) => {
+  const handleAdvanceStatus = async (order: OrderResponse, nextStatus: OrderStatus) => {
+    if (nextStatus === 'OUT_FOR_DELIVERY') {
+      setActionOrder(order)
+      setActionKind('dispatch')
+      setSelectedRiderId('')
+      try { setRiders(await getBranchRiders()) } catch (err: any) { toast.error(err.message || 'Could not load riders') }
+      return
+    }
+    if (order.paymentMethod === 'CASH_ON_DELIVERY' &&
+        (order.status === 'OUT_FOR_DELIVERY' || order.status === 'READY_FOR_PICKUP')) {
+      setActionOrder(order)
+      setActionKind('collect')
+      setCashCollected('')
+      return
+    }
     try {
-      setUpdatingId(orderId)
-      await updateOrderStatus(orderId, nextStatus)
-      toast.success(`Order #${orderId} advanced to ${nextStatus}`)
+      setUpdatingId(order.id)
+      await updateOrderStatus(order.id, nextStatus)
+      toast.success(`Order #${order.id} advanced to ${nextStatus}`)
       await loadOrders()
     } catch (err: any) {
-      const errMsg = err.message || `Failed to advance order #${orderId}`
+      const errMsg = err.message || `Failed to advance order #${order.id}`
       if (
         errMsg.toLowerCase().includes('conflict') ||
         errMsg.toLowerCase().includes('updated by another') ||
         errMsg.toLowerCase().includes('status 409') ||
         errMsg.toLowerCase().includes('409')
       ) {
-        toast.error(`409 Conflict: Order #${orderId} was updated by another user. Queue refreshed.`, {
+        toast.error(`409 Conflict: Order #${order.id} was updated by another user. Queue refreshed.`, {
           duration: 5000,
         })
         await loadOrders()
@@ -88,17 +111,39 @@ export function StaffOrderListPage() {
     }
   }
 
+  const submitSpecialAction = async () => {
+    if (!actionOrder || !actionKind) return
+    try {
+      setUpdatingId(actionOrder.id)
+      if (actionKind === 'dispatch') {
+        if (!selectedRiderId) return toast.error('Choose a rider to dispatch this order.')
+        await updateOrderStatus(actionOrder.id, 'OUT_FOR_DELIVERY', Number(selectedRiderId))
+      } else if (actionKind === 'collect') {
+        if (!Number.isFinite(Number(cashCollected)) || Number(cashCollected) < actionOrder.grandTotal) {
+          return toast.error('Cash received must cover the order total.')
+        }
+        await collectCod(actionOrder.id, Number(cashCollected))
+      } else {
+        await markDeliveryFailed(actionOrder.id, failureReason)
+      }
+      toast.success(`Order #${actionOrder.id} updated.`)
+      setActionKind(null)
+      setActionOrder(null)
+      await loadOrders()
+    } catch (err: any) {
+      toast.error(err.message || 'Could not update this order.')
+    } finally {
+      setUpdatingId(null)
+    }
+  }
+
   const getNextAction = (order: OrderResponse): { label: string; nextStatus: OrderStatus } | null => {
     const isCod = order.paymentMethod === 'CASH_ON_DELIVERY'
     switch (order.status) {
       case 'PLACED':
-        return isCod
-          ? { label: 'Approve COD & Confirm', nextStatus: 'CONFIRMED' }
-          : { label: 'Approve & Confirm', nextStatus: 'CONFIRMED' }
+        return null
       case 'PAYMENT_VERIFIED':
-        return isCod
-          ? { label: 'Complete Order', nextStatus: 'COMPLETED' }
-          : { label: 'Confirm Order', nextStatus: 'CONFIRMED' }
+        return { label: 'Confirm Order', nextStatus: 'CONFIRMED' }
       case 'CONFIRMED':
         return { label: 'Start Preparing', nextStatus: 'PREPARING' }
       case 'PREPARING':
@@ -106,11 +151,13 @@ export function StaffOrderListPage() {
           ? { label: 'Dispatch Delivery', nextStatus: 'OUT_FOR_DELIVERY' }
           : { label: 'Ready for Pickup', nextStatus: 'READY_FOR_PICKUP' }
       case 'OUT_FOR_DELIVERY':
-        return { label: 'Mark Delivered', nextStatus: 'DELIVERED' }
+        return isCod
+          ? { label: 'Collect Cash', nextStatus: 'DELIVERED' }
+          : { label: 'Mark Delivered', nextStatus: 'DELIVERED' }
       case 'DELIVERED':
       case 'READY_FOR_PICKUP':
         if (isCod && order.paymentStatus !== 'VERIFIED') {
-          return { label: 'Collect Cash & Verify', nextStatus: 'PAYMENT_VERIFIED' }
+          return { label: 'Collect Cash', nextStatus: 'COMPLETED' }
         }
         return { label: 'Complete Order', nextStatus: 'COMPLETED' }
       default:
@@ -118,39 +165,19 @@ export function StaffOrderListPage() {
     }
   }
 
-  const getSecondaryAction = (order: OrderResponse): { label: string; nextStatus: OrderStatus } | null => {
-    switch (order.status) {
-      case 'PREPARING':
-        return order.fulfillmentType === 'DELIVERY'
-          ? { label: 'Ready for Pickup', nextStatus: 'READY_FOR_PICKUP' }
-          : null
-      case 'OUT_FOR_DELIVERY':
-        return order.paymentMethod !== 'CASH_ON_DELIVERY'
-          ? { label: 'Direct Complete', nextStatus: 'COMPLETED' }
-          : null
-      default:
-        return null
-    }
-  }
-
   const canAdvanceStatus = (order: OrderResponse, nextStatus: OrderStatus): boolean => {
-    if (!user) return true
-    if (user.role === 'SUPER_ADMIN') return true
+    if (!user) return false
     if (user.role === 'CUSTOMER') return false
 
     if (user.role === 'BRANCH_MANAGER') {
-      if (user.branchId && user.branchId !== order.branchId) return false
-      if (nextStatus === 'DELIVERED' && order.fulfillmentType === 'DELIVERY') return false
-      if (nextStatus === 'PAYMENT_VERIFIED' && order.fulfillmentType === 'DELIVERY') return false
+      if (user.branchId !== order.branchId) return false
       return true
     }
 
     if (user.role === 'DELIVERY_PARTNER') {
       return (
-        nextStatus === 'OUT_FOR_DELIVERY' ||
-        nextStatus === 'DELIVERED' ||
-        nextStatus === 'PAYMENT_VERIFIED' ||
-        nextStatus === 'COMPLETED'
+        user.id === order.riderId &&
+        (nextStatus === 'DELIVERED' || nextStatus === 'COMPLETED')
       )
     }
 
@@ -228,7 +255,7 @@ export function StaffOrderListPage() {
               <Button
                 size="sm"
                 disabled={isUpdating}
-                onClick={() => handleAdvanceStatus(order.id, nextAction.nextStatus)}
+                onClick={() => handleAdvanceStatus(order, nextAction.nextStatus)}
                 className="gap-1.5 text-xs shadow-xs"
               >
                 {isUpdating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -240,6 +267,12 @@ export function StaffOrderListPage() {
                 {user?.role === 'DELIVERY_PARTNER' ? 'Kitchen Action' : 'Role Restricted'}
               </span>
             ) : null}
+
+            {order.status === 'OUT_FOR_DELIVERY' && canAdvanceStatus(order, 'DELIVERED') && (
+              <Button variant="outline" size="sm" onClick={() => { setActionOrder(order); setActionKind('failed') }}>
+                Delivery Failed
+              </Button>
+            )}
 
             <Link to={`/order/${order.id}`}>
               <Button variant="ghost" size="icon" title="View Tracking View">
@@ -254,7 +287,6 @@ export function StaffOrderListPage() {
 
   const renderCard = (order: OrderResponse) => {
     const nextAction = getNextAction(order)
-    const secondaryAction = getSecondaryAction(order)
     const isUpdating = updatingId === order.id
 
     return (
@@ -317,7 +349,7 @@ export function StaffOrderListPage() {
               <Button
                 size="sm"
                 disabled={isUpdating}
-                onClick={() => handleAdvanceStatus(order.id, nextAction.nextStatus)}
+                onClick={() => handleAdvanceStatus(order, nextAction.nextStatus)}
                 className="gap-1 text-xs"
               >
                 {isUpdating && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -330,15 +362,9 @@ export function StaffOrderListPage() {
               </span>
             ) : null}
 
-            {secondaryAction && canAdvanceStatus(order, secondaryAction.nextStatus) && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isUpdating}
-                onClick={() => handleAdvanceStatus(order.id, secondaryAction.nextStatus)}
-                className="text-xs"
-              >
-                <span>{secondaryAction.label}</span>
+            {order.status === 'OUT_FOR_DELIVERY' && canAdvanceStatus(order, 'DELIVERED') && (
+              <Button variant="outline" size="sm" onClick={() => { setActionOrder(order); setActionKind('failed') }}>
+                Delivery Failed
               </Button>
             )}
 
@@ -391,8 +417,8 @@ export function StaffOrderListPage() {
             onChange={(e) => setSelectedBranch(e.target.value)}
             className="bg-background border border-input rounded-xl px-3 py-1.5 text-xs text-foreground font-semibold focus:outline-none focus:ring-2 focus:ring-ring"
           >
-            <option value="all">All Branches</option>
-            {MOCK_BRANCHES.map((b) => (
+            <option value="all">My Branch</option>
+            {MOCK_BRANCHES.filter((b) => b.id === user?.branchId).map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name} (#{b.id})
               </option>
@@ -415,6 +441,7 @@ export function StaffOrderListPage() {
             <option value="READY_FOR_PICKUP">READY_FOR_PICKUP</option>
             <option value="OUT_FOR_DELIVERY">OUT_FOR_DELIVERY</option>
             <option value="DELIVERED">DELIVERED</option>
+            <option value="DELIVERY_FAILED">DELIVERY_FAILED</option>
             <option value="COMPLETED">COMPLETED</option>
             <option value="CANCELLED">CANCELLED</option>
           </select>
@@ -443,6 +470,42 @@ export function StaffOrderListPage() {
           }
         />
       )}
+      <Dialog open={actionKind !== null} onOpenChange={(open) => { if (!open) { setActionKind(null); setActionOrder(null) } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {actionKind === 'dispatch' ? 'Assign a rider' : actionKind === 'collect' ? 'Collect cash' : 'Report failed delivery'}
+            </DialogTitle>
+            <DialogDescription>Order #{actionOrder?.id}</DialogDescription>
+          </DialogHeader>
+          {actionKind === 'dispatch' && (
+            <select value={selectedRiderId} onChange={(e) => setSelectedRiderId(e.target.value)}
+              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
+              <option value="">Select an approved rider</option>
+              {riders.map((rider) => <option key={rider.id} value={rider.id}>{rider.name}</option>)}
+            </select>
+          )}
+          {actionKind === 'collect' && (
+            <div className="space-y-2">
+              <p className="text-sm">Amount due: Rs. {actionOrder?.grandTotal.toFixed(2)}</p>
+              <Input type="number" min={actionOrder?.grandTotal} step="0.01" value={cashCollected}
+                onChange={(e) => setCashCollected(e.target.value)} placeholder="Cash received" />
+              {Number(cashCollected) >= (actionOrder?.grandTotal ?? Infinity) && (
+                <p className="text-sm">Change: Rs. {(Number(cashCollected) - (actionOrder?.grandTotal ?? 0)).toFixed(2)}</p>
+              )}
+            </div>
+          )}
+          {actionKind === 'failed' && (
+            <select value={failureReason} onChange={(e) => setFailureReason(e.target.value)}
+              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm">
+              <option value="CUSTOMER_UNREACHABLE">Customer unreachable</option>
+              <option value="REFUSED">Customer refused delivery</option>
+              <option value="WRONG_ADDRESS">Wrong address</option>
+            </select>
+          )}
+          <DialogFooter><Button disabled={updatingId !== null} onClick={submitSpecialAction}>Confirm</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

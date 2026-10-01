@@ -5,6 +5,7 @@ import com.example.BigBite.order.OrderStatus;
 import com.example.BigBite.order.PaymentMethod;
 import com.example.BigBite.order.PaymentStatus;
 import com.example.BigBite.order.RefundStatus;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -37,6 +38,17 @@ public class OrderResponseDto {
     private String idempotencyKey;
     private Long version;
     private String cancellationReason;
+    private String failureReason;
+    private String paymentReference;
+    private int paymentAttempts;
+    private BigDecimal cashCollected;
+    private BigDecimal changeGiven;
+    private BigDecimal refundedAmount;
+    private Long riderId;
+    private LocalDateTime dispatchedAt;
+    private LocalDateTime deliveredAt;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String guestToken;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<OrderItemResponseDto> items;
@@ -267,6 +279,26 @@ public class OrderResponseDto {
     public void setCancellationReason(String cancellationReason) {
         this.cancellationReason = cancellationReason;
     }
-}
 
+    public String getFailureReason() { return failureReason; }
+    public void setFailureReason(String failureReason) { this.failureReason = failureReason; }
+    public String getPaymentReference() { return paymentReference; }
+    public void setPaymentReference(String paymentReference) { this.paymentReference = paymentReference; }
+    public int getPaymentAttempts() { return paymentAttempts; }
+    public void setPaymentAttempts(int paymentAttempts) { this.paymentAttempts = paymentAttempts; }
+    public BigDecimal getCashCollected() { return cashCollected; }
+    public void setCashCollected(BigDecimal cashCollected) { this.cashCollected = cashCollected; }
+    public BigDecimal getChangeGiven() { return changeGiven; }
+    public void setChangeGiven(BigDecimal changeGiven) { this.changeGiven = changeGiven; }
+    public BigDecimal getRefundedAmount() { return refundedAmount; }
+    public void setRefundedAmount(BigDecimal refundedAmount) { this.refundedAmount = refundedAmount; }
+    public Long getRiderId() { return riderId; }
+    public void setRiderId(Long riderId) { this.riderId = riderId; }
+    public LocalDateTime getDispatchedAt() { return dispatchedAt; }
+    public void setDispatchedAt(LocalDateTime dispatchedAt) { this.dispatchedAt = dispatchedAt; }
+    public LocalDateTime getDeliveredAt() { return deliveredAt; }
+    public void setDeliveredAt(LocalDateTime deliveredAt) { this.deliveredAt = deliveredAt; }
+    public String getGuestToken() { return guestToken; }
+    public void setGuestToken(String guestToken) { this.guestToken = guestToken; }
+}
 

@@ -40,51 +40,27 @@ export default function App() {
                 {/* Customer Ordering Portal */}
                 <Route
                   path="/order"
-                  element={
-                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
-                      <BranchSelectPage />
-                    </ProtectedRoute>
-                  }
+                  element={<BranchSelectPage />}
                 />
                 <Route
                   path="/branch/:branchId/menu"
-                  element={
-                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
-                      <MenuPage />
-                    </ProtectedRoute>
-                  }
+                  element={<MenuPage />}
                 />
                 <Route
                   path="/cart"
-                  element={
-                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
-                      <CartPage />
-                    </ProtectedRoute>
-                  }
+                  element={<CartPage />}
                 />
                 <Route
                   path="/checkout"
-                  element={
-                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
-                      <CheckoutPage />
-                    </ProtectedRoute>
-                  }
+                  element={<CheckoutPage />}
                 />
                 <Route
                   path="/order/:orderId/payment"
-                  element={
-                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
-                      <PaymentPage />
-                    </ProtectedRoute>
-                  }
+                  element={<PaymentPage />}
                 />
                 <Route
                   path="/order/:orderId"
-                  element={
-                    <ProtectedRoute allowedRoles={['CUSTOMER']}>
-                      <OrderStatusPage />
-                    </ProtectedRoute>
-                  }
+                  element={<OrderStatusPage />}
                 />
                 <Route
                   path="/orders"

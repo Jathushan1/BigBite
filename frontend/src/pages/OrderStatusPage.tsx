@@ -15,11 +15,11 @@ import {
   Sparkles,
   Plus,
   Minus,
-  Clock,
   Banknote,
   CheckCircle2,
 } from 'lucide-react'
-import { getOrder, getOrderBill, cancelOrder, updateOrderItem, claimGuestOrders } from '../api/orderApi'
+import { getOrder, getOrderBill, getStatusHistory, cancelOrder, updateOrderItem, claimGuestOrders } from '../api/orderApi'
+import type { OrderStatusHistoryEntry } from '../api/orderApi'
 import type { OrderResponse, BillResponse } from '../types/order'
 import { StatusStepper } from '../components/StatusStepper'
 import { StatusBadge } from '../components/StatusBadge'
@@ -35,6 +35,7 @@ export function OrderStatusPage() {
 
   const [order, setOrder] = useState<OrderResponse | null>(null)
   const [bill, setBill] = useState<BillResponse | null>(null)
+  const [history, setHistory] = useState<OrderStatusHistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -46,12 +47,14 @@ export function OrderStatusPage() {
     try {
       setLoading(true)
       setError(null)
-      const [orderData, billData] = await Promise.all([
+      const [orderData, billData, historyData] = await Promise.all([
         getOrder(numericOrderId),
         getOrderBill(numericOrderId),
+        getStatusHistory(numericOrderId),
       ])
       setOrder(orderData)
       setBill(billData)
+      setHistory(historyData)
     } catch (err: any) {
       setError(err.message || 'Failed to fetch order details')
     } finally {
@@ -61,12 +64,14 @@ export function OrderStatusPage() {
 
   const fetchSilent = async () => {
     try {
-      const [orderData, billData] = await Promise.all([
+      const [orderData, billData, historyData] = await Promise.all([
         getOrder(numericOrderId),
         getOrderBill(numericOrderId),
+        getStatusHistory(numericOrderId),
       ])
       setOrder(orderData)
       setBill(billData)
+      setHistory(historyData)
     } catch {
       // background poll silently ignores network blips
     }
@@ -122,7 +127,7 @@ export function OrderStatusPage() {
   const handleClaimGuestOrder = async () => {
     try {
       setClaiming(true)
-      const res = await claimGuestOrders()
+      const res = await claimGuestOrders(numericOrderId)
       toast.success(res.message || 'Guest order claimed successfully!')
       fetchData()
     } catch (err: any) {
@@ -163,8 +168,7 @@ export function OrderStatusPage() {
     ['PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(
       order.status
     )
-  // Item modifications only permitted in early status window
-  const isItemEditEligible = order && ['PLACED', 'PAYMENT_VERIFIED'].includes(order.status)
+  const isItemEditEligible = order && order.status === 'PLACED' && !order.paymentMethod
   // Guest claiming prompt: logged in user + order does not belong to user account yet
   const canClaimGuestOrder = user && user.role === 'CUSTOMER' && order && order.customerId === null
 
@@ -216,7 +220,7 @@ export function OrderStatusPage() {
             <span>Refresh</span>
           </Button>
 
-          {order?.paymentStatus === 'PENDING' && order?.paymentMethod !== 'CASH_ON_DELIVERY' && (
+          {order?.status === 'PLACED' && ['PENDING', 'FAILED'].includes(order.paymentStatus) && (
             <Link to={`/order/${order.id}/payment`}>
               <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
                 <CreditCard className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -240,27 +244,13 @@ export function OrderStatusPage() {
         </div>
       </div>
 
-      {/* COD Awaiting Approval Banner */}
-      {order?.paymentMethod === 'CASH_ON_DELIVERY' && order.status === 'PLACED' && (
-        <div className="p-4 rounded-3xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 text-xs text-amber-700 dark:text-amber-300">
-          <Clock className="w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <div>
-            <p className="font-bold text-sm">Awaiting Branch Manager Approval</p>
-            <p className="mt-0.5 text-muted-foreground">
-              Your Cash on Delivery order is queued for branch manager approval. Food preparation will start immediately once confirmed. Total cash due upon delivery: <strong className="text-foreground">Rs. {order.grandTotal.toFixed(2)}</strong>.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* COD Payment Due on Delivery Banner */}
-      {order?.paymentMethod === 'CASH_ON_DELIVERY' && order.status === 'DELIVERED' && order.paymentStatus === 'PENDING' && (
+      {order?.paymentMethod === 'CASH_ON_DELIVERY' && order.paymentStatus === 'PENDING' && (
         <div className="p-4 rounded-3xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-3 text-xs text-blue-700 dark:text-blue-300">
           <Banknote className="w-5 h-5 shrink-0 text-blue-600 dark:text-blue-400" />
           <div>
-            <p className="font-bold text-sm">Order Delivered — Cash Payment Required</p>
+            <p className="font-bold text-sm">Cash due at handover</p>
             <p className="mt-0.5 text-muted-foreground">
-              Please pay <strong className="text-foreground font-bold">Rs. {order.grandTotal.toFixed(2)}</strong> in cash to your delivery partner. The rider will verify and mark your payment as completed.
+              Please pay <strong className="text-foreground font-bold">Rs. {order.grandTotal.toFixed(2)}</strong> {order.fulfillmentType === 'TAKEAWAY' ? 'at the counter' : 'to your delivery partner'} when you receive your order.
             </p>
           </div>
         </div>
@@ -271,9 +261,9 @@ export function OrderStatusPage() {
         <div className="p-4 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-3 text-xs text-emerald-700 dark:text-emerald-300">
           <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
           <div>
-            <p className="font-bold text-sm">Cash Payment Verified by Delivery Partner</p>
+            <p className="font-bold text-sm">Cash payment received</p>
             <p className="mt-0.5 text-muted-foreground">
-              Cash payment of <strong className="text-foreground font-bold">Rs. {order.grandTotal.toFixed(2)}</strong> was physically collected and verified by your delivery partner. Thank you!
+              Cash payment of <strong className="text-foreground font-bold">Rs. {order.cashCollected?.toFixed(2) ?? order.grandTotal.toFixed(2)}</strong> was recorded. Change: Rs. {order.changeGiven?.toFixed(2) ?? '0.00'}.
             </p>
           </div>
         </div>
@@ -318,6 +308,18 @@ export function OrderStatusPage() {
         </div>
       )}
 
+      {order?.paymentStatus === 'REFUNDED' && (
+        <div className="p-4 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 text-sm text-emerald-700 dark:text-emerald-300">
+          <strong>Refund completed.</strong> Rs. {order.refundedAmount?.toFixed(2) ?? order.grandTotal.toFixed(2)} was refunded through the mock gateway.
+        </div>
+      )}
+
+      {order?.status === 'DELIVERY_FAILED' && order.failureReason && (
+        <div className="p-4 rounded-3xl bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+          <strong>Delivery failed:</strong> {order.failureReason.replaceAll('_', ' ').toLowerCase()}.
+        </div>
+      )}
+
       {/* Pipeline Status Stepper Card */}
       <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-xs">
         <h2 className="text-base font-black text-foreground mb-6">Live Status Tracker</h2>
@@ -328,6 +330,18 @@ export function OrderStatusPage() {
             paymentMethod={order.paymentMethod}
           />
         )}
+      </div>
+
+      <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-xs">
+        <h2 className="text-base font-black text-foreground mb-4">Status history</h2>
+        <ol className="space-y-3 text-sm">
+          {history.map((entry) => (
+            <li key={entry.id} className="flex flex-wrap justify-between gap-2 border-b border-border pb-3 last:border-0 last:pb-0">
+              <span><strong>{entry.toStatus.replaceAll('_', ' ')}</strong>{entry.note ? ` — ${entry.note}` : ''}</span>
+              <time className="text-muted-foreground">{new Date(entry.changedAt).toLocaleString()}</time>
+            </li>
+          ))}
+        </ol>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -341,9 +355,9 @@ export function OrderStatusPage() {
             <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-secondary text-secondary-foreground border border-border">
               {order?.paymentMethod === 'CASH_ON_DELIVERY'
                 ? order.paymentStatus === 'VERIFIED'
-                  ? 'Payment: Cash Collected by Rider'
-                  : 'Payment: Cash Due on Delivery'
-                : `Payment: ${order?.paymentStatus} (Card)`}
+                  ? 'Payment: Cash Collected'
+                  : `Payment: Cash Due ${order.fulfillmentType === 'TAKEAWAY' ? 'at Counter' : 'on Delivery'}`
+                : `Payment: ${order?.paymentStatus} (${order?.paymentMethod?.replaceAll('_', ' ') ?? 'Card'})`}
             </span>
           </div>
 

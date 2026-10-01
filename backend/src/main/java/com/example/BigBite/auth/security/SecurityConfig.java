@@ -2,6 +2,7 @@ package com.example.BigBite.auth.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -38,10 +39,22 @@ public class SecurityConfig {
             .cors(Customizer.withDefaults())
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, exception) -> {
+                response.setStatus(401);
+                response.setContentType("application/json");
+                response.getWriter().write("{\"error\":\"AUTH_REQUIRED\",\"message\":\"Authentication is required\"}");
+            }))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/register/**", "/api/auth/login").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/api/auth/me").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/orders").permitAll()
+                .requestMatchers("/api/orders/claim", "/api/orders/addresses").authenticated()
+                .requestMatchers("/api/orders/riders").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/orders").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/api/orders/*/status").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/orders/*/cod/collect", "/api/orders/*/delivery-failed").authenticated()
+                // Per-order guest access is checked against X-Guest-Token by OrderAccessGuard.
                 .requestMatchers("/api/orders/**").permitAll()
                 .requestMatchers("/error").permitAll()
                 .anyRequest().authenticated()
@@ -73,7 +86,7 @@ public class SecurityConfig {
             "http://127.0.0.1:5173"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "Origin"));
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "Origin", "X-Guest-Token", "Idempotency-Key"));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

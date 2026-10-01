@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   CheckCircle2,
@@ -13,14 +13,12 @@ import {
   Lock,
   Sparkles,
 } from 'lucide-react'
-import { getOrder, submitPayment, createPaymentIntent } from '../api/orderApi'
+import { getOrder, getPaymentOptions, submitPayment, OrderApiError } from '../api/orderApi'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/sonner'
 import { cn } from '@/lib/utils'
-import type { OrderResponse, PaymentMethod } from '../types/order'
-
-const COD_MAX_LIMIT = 3000
+import type { OrderResponse, PaymentMethod, PaymentOptions } from '../types/order'
 
 export function PaymentPage() {
   const { orderId } = useParams<{ orderId: string }>()
@@ -28,13 +26,14 @@ export function PaymentPage() {
   const navigate = useNavigate()
 
   const [order, setOrder] = useState<OrderResponse | null>(null)
+  const [paymentOptions, setPaymentOptions] = useState<PaymentOptions | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [paymentFailedNotice, setPaymentFailedNotice] = useState(false)
 
   // Payment method selection
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('CARD_STRIPE')
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('CREDIT_CARD')
 
   // Stripe sandbox card inputs
   const [cardNumber, setCardNumber] = useState('4242 4242 4242 4242')
@@ -42,18 +41,22 @@ export function PaymentPage() {
   const [cardCvc, setCardCvc] = useState('123')
   const [cardName, setCardName] = useState('')
   const [simulateFailure, setSimulateFailure] = useState(false)
+  const paymentAttemptKey = useRef<string>(crypto.randomUUID())
 
   useEffect(() => {
     async function loadOrder() {
       try {
         setLoading(true)
-        const data = await getOrder(numericOrderId)
+        const [data, options] = await Promise.all([
+          getOrder(numericOrderId), getPaymentOptions(numericOrderId),
+        ])
         setOrder(data)
+        setPaymentOptions(options)
 
-        if (data.grandTotal > COD_MAX_LIMIT) {
-          setSelectedMethod('CARD_STRIPE')
-        } else {
+        if (options.codEligible) {
           setSelectedMethod('CASH_ON_DELIVERY')
+        } else {
+          setSelectedMethod('CREDIT_CARD')
         }
 
         if (data.contactName) {
@@ -72,9 +75,9 @@ export function PaymentPage() {
 
   const handleConfirmCod = async () => {
     if (!order) return
-    if (order.grandTotal > COD_MAX_LIMIT) {
-      setError(`Cash on Delivery is only available for orders up to Rs. ${COD_MAX_LIMIT.toLocaleString()}. Please pay by card.`)
-      toast.error('Order exceeds Cash on Delivery limit.')
+    if (!paymentOptions?.codEligible) {
+      setError(paymentOptions?.codMessage || 'Cash payment is unavailable for this order.')
+      toast.error(paymentOptions?.codMessage || 'Cash payment is unavailable.')
       return
     }
 
@@ -86,9 +89,9 @@ export function PaymentPage() {
       const updated = await submitPayment(numericOrderId, {
         paymentMethod: 'CASH_ON_DELIVERY',
         success: true,
-      })
+      }, paymentAttemptKey.current)
       setOrder(updated)
-      toast.success('Cash on delivery selected — awaiting branch manager approval!')
+      toast.success('Cash payment selected. Your order is confirmed!')
       navigate(`/order/${numericOrderId}`)
     } catch (err: any) {
       const msg = err.message || 'Failed to confirm Cash on Delivery'
@@ -108,13 +111,10 @@ export function PaymentPage() {
       setError(null)
       setPaymentFailedNotice(false)
 
-      const intent = await createPaymentIntent(numericOrderId)
-
       const updated = await submitPayment(numericOrderId, {
-        paymentMethod: 'CARD_STRIPE',
-        stripePaymentIntentId: intent.clientSecret,
+        paymentMethod: selectedMethod,
         success: !simulateFailure,
-      })
+      }, paymentAttemptKey.current)
 
       setOrder(updated)
 
@@ -126,7 +126,16 @@ export function PaymentPage() {
         setPaymentFailedNotice(true)
       }
     } catch (err: any) {
-      const msg = err.message || 'Stripe card payment failed'
+      const msg = err.message || 'Card payment failed'
+      if (err instanceof OrderApiError && err.status === 402) {
+        paymentAttemptKey.current = crypto.randomUUID()
+        setPaymentFailedNotice(true)
+        if (err.code === 'PAYMENT_FAILED') {
+          toast.error('The order was cancelled after three declined attempts.')
+          navigate(`/order/${numericOrderId}`)
+          return
+        }
+      }
       setError(msg)
       toast.error(msg)
     } finally {
@@ -159,7 +168,18 @@ export function PaymentPage() {
     )
   }
 
-  const isCodAllowed = (order?.grandTotal ?? 0) <= COD_MAX_LIMIT
+  if (order && order.status !== 'PLACED') {
+    return (
+      <div className="max-w-md mx-auto px-4 py-20 text-center space-y-4">
+        <h1 className="text-xl font-black">Payment step closed</h1>
+        <p className="text-muted-foreground">This order is now {order.status.replaceAll('_', ' ').toLowerCase()}.</p>
+        <Link to={`/order/${numericOrderId}`}><Button>View order</Button></Link>
+      </div>
+    )
+  }
+
+  const isCodAllowed = paymentOptions?.codEligible ?? false
+  const isCardMethod = selectedMethod === 'CREDIT_CARD' || selectedMethod === 'DEBIT_CARD' || selectedMethod === 'CARD_STRIPE'
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
@@ -211,7 +231,7 @@ export function PaymentPage() {
             <div>
               <p className="font-bold text-sm">Payment Failed / Declined</p>
               <p className="mt-0.5 text-destructive/90">
-                The card transaction was simulated as declined. Your order remains unpaid in our system. You can adjust details and retry below without placing a new order.
+                The card transaction was simulated as declined. You can retry payment below without placing a new order.
               </p>
             </div>
           </div>
@@ -248,31 +268,31 @@ export function PaymentPage() {
                     </span>
                   )}
                 </div>
-                <h3 className="text-base font-black text-foreground">Cash on Delivery (COD)</h3>
+                <h3 className="text-base font-black text-foreground">{order?.fulfillmentType === 'TAKEAWAY' ? 'Pay at Counter' : 'Cash on Delivery (COD)'}</h3>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Pay upon handover. Order proceeds after Branch Manager approval.
+                  Pay upon handover. Your order is confirmed when you select cash.
                 </p>
               </div>
 
               <div className="mt-4 pt-3 border-t border-border">
                 {isCodAllowed ? (
                   <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
-                    <CheckCircle2 className="w-3 h-3" /> Under Rs. 3,000 Limit
+                    <CheckCircle2 className="w-3 h-3" /> Cash payment available
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 text-[11px] font-bold text-destructive bg-destructive/10 px-2 py-0.5 rounded-md">
-                    <AlertTriangle className="w-3 h-3" /> Exceeds Rs. 3,000 Limit
+                    <AlertTriangle className="w-3 h-3" /> {paymentOptions?.codMessage || 'Cash unavailable'}
                   </span>
                 )}
               </div>
             </div>
 
-            {/* Card Option: Stripe Card Payment */}
+            {/* Simulated card payment */}
             <div
-              onClick={() => setSelectedMethod('CARD_STRIPE')}
+              onClick={() => setSelectedMethod('CREDIT_CARD')}
               className={cn(
                 'rounded-2xl p-5 border-2 transition relative flex flex-col justify-between min-h-[140px] cursor-pointer',
-                selectedMethod === 'CARD_STRIPE'
+                isCardMethod
                   ? 'border-primary bg-primary/10 shadow-sm ring-2 ring-primary/20'
                   : 'border-border hover:border-muted-foreground/30 bg-card'
               )}
@@ -282,21 +302,21 @@ export function PaymentPage() {
                   <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
                     <CreditCard className="w-5 h-5 stroke-[2.2]" />
                   </div>
-                  {selectedMethod === 'CARD_STRIPE' && (
+                  {isCardMethod && (
                     <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
                       <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />
                     </span>
                   )}
                 </div>
-                <h3 className="text-base font-black text-foreground">Credit / Debit Card (Stripe)</h3>
+                <h3 className="text-base font-black text-foreground">Credit / Debit Card</h3>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Instant authorization powered by Stripe Test Gateway.
+                  Simulated card authorization for this demo.
                 </p>
               </div>
 
               <div className="mt-4 pt-3 border-t border-border flex items-center gap-1.5">
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
-                  <ShieldCheck className="w-3 h-3" /> Stripe Sandbox Mode
+                  <ShieldCheck className="w-3 h-3" /> Mock payment gateway
                 </span>
               </div>
             </div>
@@ -313,7 +333,7 @@ export function PaymentPage() {
               <div>
                 <h4 className="text-sm font-bold text-foreground">Pay on Handover</h4>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Please keep exact cash of <strong>Rs. {order?.grandTotal?.toFixed(2)}</strong> ready. Your order requires Branch Manager approval before preparation, and payment will be verified upon delivery.
+                  Please keep <strong>Rs. {order?.grandTotal?.toFixed(2)}</strong> ready. Staff will record cash and any change when your order is handed over.
                 </p>
               </div>
             </div>
@@ -334,14 +354,18 @@ export function PaymentPage() {
           </div>
         )}
 
-        {/* Tab 2 Body: Stripe Card Gateway */}
-        {selectedMethod === 'CARD_STRIPE' && (
+        {/* Tab 2 Body: mock card gateway */}
+        {isCardMethod && (
           <form onSubmit={handleStripeCardPayment} className="space-y-4 animate-in fade-in duration-150">
+            <div className="flex gap-2">
+              <Button type="button" variant={selectedMethod === 'CREDIT_CARD' ? 'default' : 'outline'} onClick={() => setSelectedMethod('CREDIT_CARD')}>Credit card</Button>
+              <Button type="button" variant={selectedMethod === 'DEBIT_CARD' ? 'default' : 'outline'} onClick={() => setSelectedMethod('DEBIT_CARD')}>Debit card</Button>
+            </div>
             <div className="bg-secondary/70 border border-border rounded-2xl p-5 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-border">
                 <div className="flex items-center gap-2 text-xs font-bold text-foreground">
                   <Lock className="w-3.5 h-3.5 text-primary" />
-                  <span>Stripe 256-bit Encrypted Checkout</span>
+                  <span>Mock card payment</span>
                 </div>
                 <button
                   type="button"
@@ -441,7 +465,7 @@ export function PaymentPage() {
               ) : (
                 <Lock className="w-4 h-4" />
               )}
-              <span>Pay Rs. {order?.grandTotal?.toFixed(2)} with Stripe</span>
+              <span>Simulate Rs. {order?.grandTotal?.toFixed(2)} card payment</span>
             </Button>
           </form>
         )}

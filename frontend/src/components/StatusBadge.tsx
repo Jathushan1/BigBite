@@ -21,7 +21,7 @@ export function StatusBadge({ status, className, dot = true }: StatusBadgeProps)
     case 'VERIFIED':
     case 'CONFIRMED':
       colorClasses = 'bg-status-confirmed/15 text-status-confirmed border-status-confirmed/30'
-      label = normalized === 'PAYMENT_VERIFIED' ? 'Payment Verified' : 'Confirmed'
+      label = normalized === 'PAYMENT_VERIFIED' ? 'Payment Verified' : normalized === 'VERIFIED' ? 'Verified' : 'Confirmed'
       break
     case 'PREPARING':
       colorClasses = 'bg-status-preparing/15 text-status-preparing border-status-preparing/30'
@@ -39,18 +39,21 @@ export function StatusBadge({ status, className, dot = true }: StatusBadgeProps)
       break
     case 'COMPLETED':
     case 'PROCESSED':
+    case 'REFUNDED':
       colorClasses = 'bg-status-completed/15 text-status-completed border-status-completed/30'
-      label = normalized === 'PROCESSED' ? 'Refund Processed' : 'Completed'
+      label = normalized === 'PROCESSED' || normalized === 'REFUNDED' ? 'Refunded' : 'Completed'
       break
     case 'CANCELLED':
     case 'FAILED':
+    case 'DELIVERY_FAILED':
       colorClasses = 'bg-status-cancelled/15 text-status-cancelled border-status-cancelled/30'
-      label = normalized === 'FAILED' ? 'Failed' : 'Cancelled'
+      label = normalized === 'DELIVERY_FAILED' ? 'Delivery Failed' : normalized === 'FAILED' ? 'Failed' : 'Cancelled'
       break
     case 'REFUND_PENDING':
     case 'PENDING':
+    case 'VOIDED':
       colorClasses = 'bg-status-refund-pending/15 text-status-refund-pending border-status-refund-pending/30'
-      label = normalized === 'REFUND_PENDING' ? 'Refund Pending' : 'Pending'
+      label = normalized === 'REFUND_PENDING' ? 'Refund Pending' : normalized === 'VOIDED' ? 'Voided' : 'Pending'
       break
     case 'ROLE_ADMIN':
     case 'ADMIN':
