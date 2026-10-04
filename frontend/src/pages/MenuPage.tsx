@@ -1,8 +1,12 @@
+import { useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Plus, Minus, ArrowRight, ShoppingBag, MapPin, ArrowLeft, Store, Bike, UtensilsCrossed } from 'lucide-react'
+import { Plus, Minus, MapPin, ArrowLeft, Store, Bike, UtensilsCrossed, Search } from 'lucide-react'
 import { MOCK_BRANCHES, MOCK_MENU_ITEMS } from '../mocks/orderMockData'
 import { useCart } from '../context/CartContext'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { CategorySlider } from '@/components/CategorySlider'
+import { FloatingCartBar } from '@/components/FloatingCartBar'
 import { cn } from '@/lib/utils'
 
 export function MenuPage() {
@@ -10,9 +14,32 @@ export function MenuPage() {
   const numericBranchId = Number(branchId)
 
   const branch = MOCK_BRANCHES.find((b) => b.id === numericBranchId)
-  const branchMenuItems = MOCK_MENU_ITEMS.filter((item) => item.branchId === numericBranchId)
+  const branchMenuItems = useMemo(() => {
+    return MOCK_MENU_ITEMS.filter((item) => item.branchId === numericBranchId)
+  }, [numericBranchId])
 
-  const { items, addItem, updateQuantity, totalCount, grandTotal } = useCart()
+  const [selectedCategory, setSelectedCategory] = useState('All')
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const categories = useMemo(() => {
+    const set = new Set<string>(['All'])
+    branchMenuItems.forEach((item) => {
+      if (item.category) set.add(item.category)
+    })
+    return Array.from(set)
+  }, [branchMenuItems])
+
+  const filteredItems = useMemo(() => {
+    return branchMenuItems.filter((item) => {
+      const matchesCat = selectedCategory === 'All' || item.category === selectedCategory
+      const matchesSearch =
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.description.toLowerCase().includes(searchQuery.toLowerCase())
+      return matchesCat && matchesSearch
+    })
+  }, [branchMenuItems, selectedCategory, searchQuery])
+
+  const { items, addItem, updateQuantity } = useCart()
 
   if (!branch) {
     return (
@@ -39,7 +66,7 @@ export function MenuPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 pb-36">
       {/* Branch Header Banner */}
-      <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 mb-8 shadow-xs">
+      <div className="bg-card border border-border/80 rounded-3xl p-6 sm:p-8 mb-8 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -78,139 +105,144 @@ export function MenuPage() {
         </div>
       </div>
 
-      {/* Menu Section Header */}
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div>
-          <h2 className="text-2xl font-black text-foreground tracking-tight">Branch Menu</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Explore freshly made items prepared at this branch.</p>
+      {/* Category Slider & Search Bar */}
+      <div className="sticky top-16 z-20 bg-background/90 backdrop-blur-md py-3 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 border-b border-border/60 mb-8 space-y-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <CategorySlider
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+            className="flex-1"
+          />
+
+          <div className="relative w-full sm:w-64 shrink-0">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search items..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-10 rounded-xl bg-card text-xs border-border/80"
+            />
+          </div>
         </div>
-        <span className="text-xs font-bold text-muted-foreground bg-secondary px-3 py-1.5 rounded-lg border border-border self-start sm:self-auto">
-          {branchMenuItems.length} {branchMenuItems.length === 1 ? 'Item' : 'Items'} Available
+      </div>
+
+      {/* Menu Section Header */}
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-black text-foreground tracking-tight">
+            {selectedCategory === 'All' ? 'All Items' : selectedCategory}
+          </h2>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">Freshly hand-crafted on order.</p>
+        </div>
+        <span className="text-xs font-bold text-muted-foreground bg-secondary px-3 py-1.5 rounded-xl border border-border/60">
+          {filteredItems.length} {filteredItems.length === 1 ? 'Item' : 'Items'}
         </span>
       </div>
 
-      {/* Menu Items Grid: Single col on mobile (< md), 2 col on tablet (md), 3 col on desktop (lg) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {branchMenuItems.map((item) => {
-          const qty = getItemQuantityInCart(item.id)
-          const isItemAvailable = item.available !== false
+      {/* Menu Items Grid */}
+      {filteredItems.length === 0 ? (
+        <div className="text-center py-16 bg-card border border-border rounded-3xl p-8 max-w-md mx-auto">
+          <UtensilsCrossed className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+          <h3 className="text-lg font-bold text-foreground">No menu items match your search</h3>
+          <p className="text-xs text-muted-foreground mt-1">Try another category or clear your search term.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredItems.map((item) => {
+            const qty = getItemQuantityInCart(item.id)
+            const isItemAvailable = item.available !== false
 
-          return (
-            <div
-              key={item.id}
-              className={cn(
-                'bg-card text-card-foreground border rounded-3xl p-6 flex flex-col justify-between shadow-xs transition-all duration-200',
-                isItemAvailable
-                  ? 'border-border hover:border-primary/40 hover:shadow-md'
-                  : 'border-border/60 bg-muted/40 opacity-75'
-              )}
-            >
-              <div>
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-primary/10 text-primary border border-primary/20 uppercase tracking-wide">
-                      {item.category}
-                    </span>
-                    {!isItemAvailable && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-muted text-muted-foreground">
-                        Out of Stock
+            return (
+              <div
+                key={item.id}
+                className={cn(
+                  'bg-card text-card-foreground border rounded-3xl p-6 flex flex-col justify-between shadow-xs transition-all duration-300 hover:shadow-xl hover:border-primary/40',
+                  isItemAvailable
+                    ? 'border-border/80'
+                    : 'border-border/60 bg-muted/40 opacity-75'
+                )}
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2.5 py-1 rounded-lg text-[11px] font-black bg-primary/10 text-primary border border-primary/20 uppercase tracking-wide">
+                        {item.category}
                       </span>
-                    )}
-                  </div>
-                  <span className="text-lg font-black text-foreground">
-                    Rs. {item.price.toFixed(2)}
-                  </span>
-                </div>
-                <h3 className="text-lg font-bold text-foreground mb-2 leading-snug">{item.name}</h3>
-                <p className="text-sm text-muted-foreground mb-6 line-clamp-3 leading-relaxed">{item.description}</p>
-              </div>
-
-              <div className="pt-3 border-t border-border">
-                {!isItemAvailable ? (
-                  <Button
-                    type="button"
-                    disabled
-                    variant="secondary"
-                    className="w-full text-xs font-bold"
-                  >
-                    <span>Currently Unavailable</span>
-                  </Button>
-                ) : qty > 0 ? (
-                  <div className="flex items-center justify-between bg-secondary/80 border border-border rounded-xl p-1">
-                    <button
-                      type="button"
-                      onClick={() => updateQuantity(item.id, -1)}
-                      className="min-h-[44px] min-w-[44px] rounded-lg bg-card hover:bg-muted text-foreground border border-border flex items-center justify-center transition cursor-pointer shadow-xs active:scale-95"
-                      title="Decrease quantity"
-                      aria-label="Decrease quantity"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <span className="text-sm font-black text-foreground px-3">
-                      {qty} in cart
+                      {!isItemAvailable && (
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-muted text-muted-foreground">
+                          Out of Stock
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-lg font-black text-foreground">
+                      LKR {item.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </span>
-                    <button
+                  </div>
+                  <h3 className="text-lg font-bold text-foreground mb-2 leading-snug">{item.name}</h3>
+                  <p className="text-sm text-muted-foreground mb-6 line-clamp-3 leading-relaxed">{item.description}</p>
+                </div>
+
+                <div className="pt-3 border-t border-border/80">
+                  {!isItemAvailable ? (
+                    <Button
                       type="button"
-                      onClick={() => updateQuantity(item.id, 1)}
-                      className="min-h-[44px] min-w-[44px] rounded-lg bg-primary hover:bg-primary-hover text-primary-foreground flex items-center justify-center transition cursor-pointer shadow-xs active:scale-95"
-                      title="Increase quantity"
-                      aria-label="Increase quantity"
+                      disabled
+                      variant="secondary"
+                      className="w-full text-xs font-bold rounded-2xl"
+                    >
+                      <span>Currently Unavailable</span>
+                    </Button>
+                  ) : qty > 0 ? (
+                    <div className="flex items-center justify-between bg-secondary/80 border border-border/80 rounded-2xl p-1">
+                      <button
+                        type="button"
+                        onClick={() => updateQuantity(item.id, -1)}
+                        className="h-10 w-10 rounded-xl bg-card hover:bg-muted text-foreground border border-border/60 flex items-center justify-center transition cursor-pointer shadow-xs active:scale-95"
+                        title="Decrease quantity"
+                        aria-label="Decrease quantity"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="text-sm font-black text-foreground px-3">
+                        {qty} in cart
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => updateQuantity(item.id, 1)}
+                        className="h-10 w-10 rounded-xl bg-primary hover:bg-primary-hover text-primary-foreground flex items-center justify-center transition cursor-pointer shadow-xs active:scale-95"
+                        title="Increase quantity"
+                        aria-label="Increase quantity"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={() =>
+                        addItem(
+                          { menuItemId: item.id, name: item.name, price: item.price },
+                          numericBranchId
+                        )
+                      }
+                      className="w-full gap-2 h-11 rounded-2xl"
+                      variant="default"
                     >
                       <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <Button
-                    type="button"
-                    onClick={() =>
-                      addItem(
-                        { menuItemId: item.id, name: item.name, price: item.price },
-                        numericBranchId
-                      )
-                    }
-                    className="w-full gap-2 min-h-[44px]"
-                    variant="default"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add to Cart</span>
-                  </Button>
-                )}
+                      <span>Add to Cart</span>
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Floating Bottom Cart Bar (Sticky on mobile and tablet) */}
-      {totalCount > 0 && (
-        <div className="fixed bottom-4 left-4 right-4 max-w-3xl mx-auto z-30 animate-in slide-in-from-bottom duration-200">
-          <div className="bg-primary text-primary-foreground rounded-2xl p-4 shadow-2xl shadow-primary/30 flex items-center justify-between border border-accent/30 backdrop-blur-md">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-primary-foreground text-primary flex items-center justify-center font-black shadow-xs shrink-0">
-                <ShoppingBag className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-primary-foreground/90">
-                  {totalCount} {totalCount === 1 ? 'item' : 'items'} in Cart
-                </p>
-                <p className="text-base sm:text-xl font-black leading-tight text-primary-foreground">
-                  Est. Rs. {grandTotal.toFixed(2)}
-                </p>
-              </div>
-            </div>
-
-            <Link to="/cart">
-              <Button
-                variant="outline"
-                className="bg-card hover:bg-secondary text-foreground font-black text-xs sm:text-sm gap-1.5 shadow-sm active:scale-95"
-              >
-                <span>View Cart</span>
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </Link>
-          </div>
+            )
+          })}
         </div>
       )}
+
+      {/* Floating Bottom Cart Bar */}
+      <FloatingCartBar />
     </div>
   )
 }

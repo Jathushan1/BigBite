@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Trash2, Plus, Minus, ArrowRight, ArrowLeft, Tag, Bike, Store, AlertCircle, ShoppingBag, Check } from 'lucide-react'
+import { Trash2, Plus, Minus, ArrowRight, ArrowLeft, Tag, AlertCircle, ShoppingBag, Check } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { MOCK_BRANCHES } from '../mocks/orderMockData'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { FulfillmentToggle } from '@/components/FulfillmentToggle'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/sonner'
@@ -192,69 +193,13 @@ export function CartPage() {
 
           {/* Fulfillment Type Selection */}
           <div className="bg-card border border-border rounded-3xl p-6 shadow-xs">
-            <h3 className="text-lg font-bold text-foreground mb-4">Select Fulfillment</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <button
-                type="button"
-                onClick={() => setFulfillmentType('DELIVERY')}
-                className={cn(
-                  'flex items-start gap-3.5 p-4 rounded-2xl border text-left transition cursor-pointer',
-                  fulfillmentType === 'DELIVERY'
-                    ? 'border-primary bg-primary/10 ring-2 ring-primary/20'
-                    : 'border-border bg-card hover:border-muted-foreground/30'
-                )}
-              >
-                <div
-                  className={cn(
-                    'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
-                    fulfillmentType === 'DELIVERY'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-secondary text-muted-foreground'
-                  )}
-                >
-                  <Bike className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="font-bold text-foreground text-sm">Delivery</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">Flat Rs. 300.00</div>
-                  <div className="text-[11px] text-muted-foreground/80 mt-1">Delivered hot to your door</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                disabled={currentBranch && !currentBranch.takeaway}
-                onClick={() => setFulfillmentType('TAKEAWAY')}
-                className={cn(
-                  'flex items-start gap-3.5 p-4 rounded-2xl border text-left transition',
-                  fulfillmentType === 'TAKEAWAY'
-                    ? 'border-primary bg-primary/10 ring-2 ring-primary/20 cursor-pointer'
-                    : currentBranch && !currentBranch.takeaway
-                    ? 'border-border/60 bg-muted/40 text-muted-foreground cursor-not-allowed opacity-60'
-                    : 'border-border bg-card hover:border-muted-foreground/30 cursor-pointer'
-                )}
-              >
-                <div
-                  className={cn(
-                    'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
-                    fulfillmentType === 'TAKEAWAY'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-secondary text-muted-foreground'
-                  )}
-                >
-                  <Store className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="font-bold text-foreground text-sm">Takeaway / Pickup</div>
-                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
-                    {currentBranch && !currentBranch.takeaway ? 'Not Supported' : 'Free (Self pickup)'}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground/80 mt-1">
-                    {currentBranch && !currentBranch.takeaway ? 'Disabled for this branch' : 'Collect at the branch counter'}
-                  </div>
-                </div>
-              </button>
-            </div>
+            <h3 className="text-lg font-bold text-foreground mb-4">Select Fulfillment Method</h3>
+            <FulfillmentToggle
+              value={fulfillmentType}
+              onChange={setFulfillmentType}
+              takeawayAvailable={currentBranch ? currentBranch.takeaway : true}
+              className="w-full"
+            />
 
             {/* Delivery Address Preview Input */}
             {fulfillmentType === 'DELIVERY' && (
