@@ -1,8 +1,8 @@
 package com.example.BigBite.menu.strategy;
 
-import com.example.BigBite.menu.entity.MenuItem;
+import com.example.BigBite.menu.dto.MenuItemRequestDto;
 
-/** Strategy interface: validation rules can be swapped without changing the service. */
 public interface MenuItemValidationStrategy {
-    void validate(MenuItem menuItem);
+
+    void validate(MenuItemRequestDto request);
 }

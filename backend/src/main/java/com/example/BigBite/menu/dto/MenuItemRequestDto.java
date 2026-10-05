@@ -1,47 +1,34 @@
-package com.example.BigBite.menu.entity;
+package com.example.BigBite.menu.dto;
 
-import com.example.BigBite.branch.Branch;
-import jakarta.persistence.*;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 
-@Entity
-@Table(name = "menu_items")
-public class MenuItem {
+public class MenuItemRequestDto {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long menuId;
-
-    @Column(nullable = false)
+    @NotBlank(message = "Menu name is required")
+    @Size(max = 150, message = "Menu name must be at most 150 characters")
     private String menuName;
 
+    @Size(max = 100, message = "Category must be at most 100 characters")
     private String category;
 
-    @Column(length = 1000)
+    @Size(max = 1000, message = "Description must be at most 1000 characters")
     private String description;
 
-    @Column(nullable = false, precision = 10, scale = 2)
+    @NotNull(message = "Price is required")
+    @Digits(integer = 8, fraction = 2, message = "Price must have at most 8 digits and 2 decimal places")
     private BigDecimal price;
 
+    @Size(max = 255, message = "Photo must be at most 255 characters")
     private String photo;
 
-    @Column(nullable = false)
-    private boolean availability;
+    private boolean availability = true;
 
-    @ManyToOne
-    @JoinColumn(name = "branch_id", nullable = false)
-    private Branch branch;
-
-    public MenuItem() {
-    }
-
-    public Long getMenuId() {
-        return menuId;
-    }
-
-    public void setMenuId(Long menuId) {
-        this.menuId = menuId;
+    public MenuItemRequestDto() {
     }
 
     public String getMenuName() {
@@ -90,13 +77,5 @@ public class MenuItem {
 
     public void setAvailability(boolean availability) {
         this.availability = availability;
-    }
-
-    public Branch getBranch() {
-        return branch;
-    }
-
-    public void setBranch(Branch branch) {
-        this.branch = branch;
     }
 }

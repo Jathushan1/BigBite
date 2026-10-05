@@ -1,39 +1,41 @@
-package com.example.BigBite.menu.entity;
+package com.example.BigBite.menu.dto;
 
-import com.example.BigBite.branch.Branch;
-import jakarta.persistence.*;
+import com.example.BigBite.menu.entity.MenuItem;
 
 import java.math.BigDecimal;
 
-@Entity
-@Table(name = "menu_items")
-public class MenuItem {
+public class MenuItemResponseDto {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long menuId;
-
-    @Column(nullable = false)
     private String menuName;
-
     private String category;
-
-    @Column(length = 1000)
     private String description;
-
-    @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
-
     private String photo;
-
-    @Column(nullable = false)
     private boolean availability;
+    private Long branchId;
+    private String branchName;
 
-    @ManyToOne
-    @JoinColumn(name = "branch_id", nullable = false)
-    private Branch branch;
+    public MenuItemResponseDto() {
+    }
 
-    public MenuItem() {
+    public static MenuItemResponseDto fromEntity(MenuItem menuItem) {
+        if (menuItem == null) {
+            return null;
+        }
+        MenuItemResponseDto dto = new MenuItemResponseDto();
+        dto.setMenuId(menuItem.getMenuId());
+        dto.setMenuName(menuItem.getMenuName());
+        dto.setCategory(menuItem.getCategory());
+        dto.setDescription(menuItem.getDescription());
+        dto.setPrice(menuItem.getPrice());
+        dto.setPhoto(menuItem.getPhoto());
+        dto.setAvailability(menuItem.isAvailability());
+        if (menuItem.getBranch() != null) {
+            dto.setBranchId(menuItem.getBranch().getId());
+            dto.setBranchName(menuItem.getBranch().getName());
+        }
+        return dto;
     }
 
     public Long getMenuId() {
@@ -92,11 +94,19 @@ public class MenuItem {
         this.availability = availability;
     }
 
-    public Branch getBranch() {
-        return branch;
+    public Long getBranchId() {
+        return branchId;
     }
 
-    public void setBranch(Branch branch) {
-        this.branch = branch;
+    public void setBranchId(Long branchId) {
+        this.branchId = branchId;
+    }
+
+    public String getBranchName() {
+        return branchName;
+    }
+
+    public void setBranchName(String branchName) {
+        this.branchName = branchName;
     }
 }

@@ -1,6 +1,5 @@
 package com.example.BigBite.menu.event;
 
-/** Event published after a menu item is created, updated, or deleted. */
 public class MenuItemChangedEvent {
     private final String action;
     private final Long menuId;
