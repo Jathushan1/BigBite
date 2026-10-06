@@ -27,4 +27,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
            "(:role IS NULL OR u.role = :role) AND " +
            "(:status IS NULL OR u.status = :status)")
     List<User> findByFilter(@Param("role") Role role, @Param("status") UserStatus status);
+
+    long countByBranchId(Long branchId);
+
+    List<User> findByBranchIdAndRoleIn(Long branchId, java.util.Collection<Role> roles);
 }

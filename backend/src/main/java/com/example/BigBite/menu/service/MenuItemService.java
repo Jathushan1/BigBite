@@ -2,6 +2,7 @@ package com.example.BigBite.menu.service;
 
 import com.example.BigBite.auth.exception.ResourceNotFoundException;
 import com.example.BigBite.branch.Branch;
+import com.example.BigBite.branch.BranchStatus;
 import com.example.BigBite.branch.BranchRepository;
 import com.example.BigBite.menu.dto.MenuItemRequestDto;
 import com.example.BigBite.menu.dto.MenuItemResponseDto;
@@ -48,19 +49,30 @@ public class MenuItemService {
 
         Branch branch = branchRepository.findById(branchId)
                 .orElseThrow(() -> new ResourceNotFoundException("Branch not found with id: " + branchId));
+        requireActiveBranch(branch);
 
         MenuItem saved = menuItemRepository.save(menuItemFactory.createMenuItem(request, branch));
         eventPublisher.publishEvent(new MenuItemChangedEvent(
-                "created", saved.getMenuId(), saved.getMenuName()));
+                "created", saved.getMenuId(), saved.getMenuName(), branchId, saved.isAvailability()));
         return MenuItemResponseDto.fromEntity(saved);
     }
 
     @Transactional(readOnly = true)
     public List<MenuItemResponseDto> getMenuItemsByBranch(Long branchId) {
+        return getMenuItemsByBranch(branchId, false);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MenuItemResponseDto> getMenuItemsByBranch(Long branchId, boolean availableOnly) {
         if (!branchRepository.existsById(branchId)) {
             throw new ResourceNotFoundException("Branch not found with id: " + branchId);
         }
-        return menuItemRepository.findByBranchId(branchId).stream()
+        List<MenuItem> items = availableOnly
+                ? menuItemRepository.findByBranchIdAndAvailabilityTrue(branchId)
+                : menuItemRepository.findByBranchId(branchId);
+        return items.stream()
+                .sorted(java.util.Comparator.comparing((MenuItem item) -> item.getCategory() == null ? "" : item.getCategory())
+                        .thenComparing(MenuItem::getMenuName))
                 .map(MenuItemResponseDto::fromEntity)
                 .toList();
     }
@@ -74,13 +86,14 @@ public class MenuItemService {
     public MenuItemResponseDto updateMenuItem(Long menuId, MenuItemRequestDto request) {
         MenuItem menuItem = findMenuItem(menuId);
         accessGuard.requireManageAccess(menuItem.getBranch().getId());
+        requireActiveBranch(menuItem.getBranch());
         validationStrategy.validate(request);
 
         menuItemFactory.applyRequest(menuItem, request);
 
         MenuItem saved = menuItemRepository.save(menuItem);
         eventPublisher.publishEvent(new MenuItemChangedEvent(
-                "updated", saved.getMenuId(), saved.getMenuName()));
+                "updated", saved.getMenuId(), saved.getMenuName(), saved.getBranch().getId(), saved.isAvailability()));
         return MenuItemResponseDto.fromEntity(saved);
     }
 
@@ -91,7 +104,13 @@ public class MenuItemService {
 
         menuItemRepository.delete(menuItem);
         eventPublisher.publishEvent(new MenuItemChangedEvent(
-                "deleted", menuId, menuItem.getMenuName()));
+                "deleted", menuId, menuItem.getMenuName(), menuItem.getBranch().getId(), false));
+    }
+
+    private void requireActiveBranch(Branch branch) {
+        if (branch.getStatus() != BranchStatus.ACTIVE) {
+            throw new IllegalStateException("Branch '" + branch.getName() + "' is inactive; activate it before changing its menu");
+        }
     }
 
     private MenuItem findMenuItem(Long menuId) {

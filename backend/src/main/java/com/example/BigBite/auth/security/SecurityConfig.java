@@ -1,5 +1,7 @@
 package com.example.BigBite.auth.security;
 
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -28,9 +30,19 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final boolean outboxPublic;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter,
+                          @Value("${app.mail.outbox-public:true}") boolean outboxPublic) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.outboxPublic = outboxPublic;
+    }
+
+    private static void writeError(HttpServletResponse response, int status, String code, String message)
+            throws java.io.IOException {
+        response.setStatus(status);
+        response.setContentType("application/json");
+        response.getWriter().write("{\"status\":" + status + ",\"error\":\"" + code + "\",\"message\":\"" + message + "\"}");
     }
 
     @Bean
@@ -39,14 +51,22 @@ public class SecurityConfig {
             .cors(Customizer.withDefaults())
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, exception) -> {
-                response.setStatus(401);
-                response.setContentType("application/json");
-                response.getWriter().write("{\"error\":\"AUTH_REQUIRED\",\"message\":\"Authentication is required\"}");
-            }))
+            .exceptionHandling(errors -> errors
+                .authenticationEntryPoint((request, response, exception) ->
+                        writeError(response, 401, "AUTH_REQUIRED", "Authentication is required"))
+                .accessDeniedHandler((request, response, exception) ->
+                        writeError(response, 403, "FORBIDDEN", "Access denied: you do not have sufficient permissions")))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/register/**", "/api/auth/login").permitAll()
+                .requestMatchers("/api/auth/register/**", "/api/auth/login",
+                        "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/branches", "/api/branches/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/menu/**").permitAll()
+                .requestMatchers("/api/dev/outbox").access((authentication, context) ->
+                        new org.springframework.security.authorization.AuthorizationDecision(outboxPublic
+                                || authentication.get().getAuthorities().stream()
+                                        .anyMatch(a -> "ROLE_SUPER_ADMIN".equals(a.getAuthority()))))
                 .requestMatchers("/api/admin/**").hasRole("SUPER_ADMIN")
+                .requestMatchers("/api/manager/**").hasRole("BRANCH_MANAGER")
                 .requestMatchers("/api/auth/me").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/orders").permitAll()
                 .requestMatchers("/api/orders/claim", "/api/orders/addresses").authenticated()
@@ -79,11 +99,12 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of(
+        configuration.setAllowedOriginPatterns(List.of(
             "http://localhost:3000",
             "http://localhost:5173",
             "http://127.0.0.1:3000",
-            "http://127.0.0.1:5173"
+            "http://127.0.0.1:5173",
+            "http://localhost:4173"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "Origin", "X-Guest-Token", "Idempotency-Key"));

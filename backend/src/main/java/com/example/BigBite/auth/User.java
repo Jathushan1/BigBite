@@ -1,6 +1,8 @@
 package com.example.BigBite.auth;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 
 @Entity
@@ -24,11 +26,13 @@ public class User {
     private String password;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(nullable = false, length = 32)
     private Role role;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(nullable = false, length = 32)
     private UserStatus status;
 
     @Column(name = "branch_id")
@@ -45,6 +49,10 @@ public class User {
 
     @Column(name = "rejection_reason")
     private String rejectionReason;
+
+    /** Tokens issued before this instant are rejected, so a password change ends old sessions. */
+    @Column(name = "password_changed_at")
+    private LocalDateTime passwordChangedAt;
 
     public User() {}
 
@@ -169,5 +177,13 @@ public class User {
 
     public void setRejectionReason(String rejectionReason) {
         this.rejectionReason = rejectionReason;
+    }
+
+    public LocalDateTime getPasswordChangedAt() {
+        return passwordChangedAt;
+    }
+
+    public void setPasswordChangedAt(LocalDateTime passwordChangedAt) {
+        this.passwordChangedAt = passwordChangedAt;
     }
 }

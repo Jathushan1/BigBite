@@ -1,5 +1,8 @@
 package com.example.BigBite.auth;
 
+import com.example.BigBite.branch.Branch;
+import com.example.BigBite.branch.BranchRepository;
+import com.example.BigBite.branch.BranchStatus;
 import com.example.BigBite.auth.dto.AssignBranchRequestDto;
 import com.example.BigBite.auth.dto.RejectUserRequestDto;
 import com.example.BigBite.auth.dto.UserDto;
@@ -24,6 +27,9 @@ class AdminUserServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private BranchRepository branchRepository;
+
     @InjectMocks
     private AdminUserService adminUserService;
 
@@ -37,6 +43,7 @@ class AdminUserServiceTest {
 
         pendingManager = new User("Bob Manager", "bob@example.com", "pass", Role.BRANCH_MANAGER, UserStatus.PENDING_APPROVAL);
         pendingManager.setId(5L);
+        pendingManager.setBranchId(42L);
     }
 
     @Test
@@ -82,12 +89,35 @@ class AdminUserServiceTest {
     @DisplayName("Admin can assign a branch to branch manager")
     void testAssignBranchToManager() {
         pendingManager.setStatus(UserStatus.APPROVED);
+        pendingManager.setBranchId(null);
+        Branch branch = new Branch("Colombo", "CMB", "1 Road", "Colombo", "0112345678", "c@bigbite.lk");
         when(userRepository.findById(5L)).thenReturn(Optional.of(pendingManager));
+        when(branchRepository.findById(42L)).thenReturn(Optional.of(branch));
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         UserDto updated = adminUserService.assignBranch(5L, new AssignBranchRequestDto(42L));
 
         assertEquals(42L, updated.getBranchId());
+    }
+
+    @Test
+    @DisplayName("Assigning an inactive or unknown branch is rejected")
+    void testAssignInactiveBranchFails() {
+        Branch inactive = new Branch("Closed", "CLS", "1 Road", "Colombo", "0112345678", "x@bigbite.lk");
+        inactive.setStatus(BranchStatus.INACTIVE);
+        when(userRepository.findById(5L)).thenReturn(Optional.of(pendingManager));
+        when(branchRepository.findById(43L)).thenReturn(Optional.of(inactive));
+
+        assertThrows(IllegalArgumentException.class, () -> adminUserService.assignBranch(5L, new AssignBranchRequestDto(43L)));
+    }
+
+    @Test
+    @DisplayName("Approval requires a branch to be assigned first")
+    void testApproveWithoutBranchFails() {
+        pendingManager.setBranchId(null);
+        when(userRepository.findById(5L)).thenReturn(Optional.of(pendingManager));
+
+        assertThrows(IllegalArgumentException.class, () -> adminUserService.approveUser(5L, "admin@bigbite.com"));
     }
 
     @Test

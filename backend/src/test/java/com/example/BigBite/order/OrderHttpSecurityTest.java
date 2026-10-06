@@ -2,59 +2,80 @@ package com.example.BigBite.order;
 
 import com.example.BigBite.auth.Role;
 import com.example.BigBite.auth.User;
-import com.example.BigBite.auth.UserRepository;
-import com.example.BigBite.auth.UserStatus;
+import com.example.BigBite.branch.Branch;
+import com.example.BigBite.branch.BranchSaleRepository;
+import com.example.BigBite.branch.OrderSalesRecorder;
+import com.example.BigBite.support.TestFixtures;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
+import static com.example.BigBite.support.TestFixtures.APPROVED_CARD;
+import static com.example.BigBite.support.TestFixtures.cardPayment;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(TestFixtures.class)
 class OrderHttpSecurityTest {
     @Autowired private MockMvc mvc;
-    @Autowired private UserRepository users;
+    @Autowired private TestFixtures fixtures;
+    @Autowired private BranchSaleRepository sales;
+    @Autowired private OrderRateLimiter rateLimiter;
     private final ObjectMapper json = new ObjectMapper();
 
-    private String placeGuestOrder() throws Exception {
+    private Branch branch;
+    private long itemId;
+
+    @BeforeEach
+    void seed() {
+        rateLimiter.reset();
+        branch = fixtures.branch();
+        itemId = fixtures.menuItem(branch, "1200.00").getMenuId();
+    }
+
+    private String guestOrder(String fulfillment) throws Exception {
+        String address = fulfillment.equals("DELIVERY") ? "\"deliveryAddress\":\"42 Galle Road\"," : "";
         return mvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"branchId":1,"fulfillmentType":"TAKEAWAY", "guestName":"Guest",
-                                 "guestPhone":"0771234567", "items":[{"menuItemId":101,"quantity":1}]}
-                                """))
+                        .content("{\"branchId\":" + branch.getId() + ",\"fulfillmentType\":\"" + fulfillment + "\","
+                                + address + "\"guestName\":\"Guest\",\"guestPhone\":\"0771234567\","
+                                + "\"items\":[{\"menuItemId\":" + itemId + ",\"quantity\":1}]}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
     }
 
-    private User staff(Role role, long branchId) {
-        User actor = new User(role.name(), role.name().toLowerCase() + "-" + java.util.UUID.randomUUID()
-                + "@example.com", "secret", role, UserStatus.APPROVED);
-        actor.setBranchId(branchId);
-        return users.save(actor);
+    private String customerOrder(User customer, String fulfillment) throws Exception {
+        String address = fulfillment.equals("DELIVERY") ? "\"deliveryAddress\":\"42 Galle Road\"," : "";
+        return mvc.perform(post("/api/orders")
+                        .with(user(customer.getEmail()).roles("CUSTOMER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customerId\":9999,\"branchId\":" + branch.getId() + ",\"fulfillmentType\":\""
+                                + fulfillment + "\"," + address
+                                + "\"items\":[{\"menuItemId\":" + itemId + ",\"quantity\":1}]}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.customerId").value(customer.getId()))
+                .andReturn().getResponse().getContentAsString();
     }
 
-    private String placeGuestDeliveryOrder() throws Exception {
-        return mvc.perform(post("/api/orders")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"branchId":1,"fulfillmentType":"DELIVERY","deliveryAddress":"42 Galle Road",
-                                 "guestName":"Guest", "guestPhone":"0771234567",
-                                 "items":[{"menuItemId":101,"quantity":1}]}
-                                """))
-                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+    private void moveAs(User actor, String role, long id, String body) throws Exception {
+        mvc.perform(put("/api/orders/{id}/status", id)
+                        .with(user(actor.getEmail()).roles(role))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk());
     }
 
     @Test
     void guestTokenControlsReadAndPayment() throws Exception {
-        String placed = placeGuestOrder();
+        String placed = guestOrder("TAKEAWAY");
         long id = json.readTree(placed).get("id").asLong();
         String token = json.readTree(placed).get("guestToken").asText();
         assertFalse(token.isBlank());
@@ -69,76 +90,79 @@ class OrderHttpSecurityTest {
                         .header("X-Guest-Token", token)
                         .header("Idempotency-Key", "http-guest-" + id)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"method\":\"CREDIT_CARD\",\"success\":true}"))
+                        .content(cardPayment("CREDIT_CARD", APPROVED_CARD)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PAYMENT_VERIFIED"));
+                .andExpect(jsonPath("$.status").value("PAYMENT_VERIFIED"))
+                .andExpect(jsonPath("$.awaitingAcceptance").value(true))
+                .andExpect(jsonPath("$.cardLast4").value("4242"));
         mvc.perform(get("/api/orders/{id}/history", id).header("X-Guest-Token", token))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[1].toStatus").value("PAYMENT_VERIFIED"));
     }
 
     @Test
-    void anonymousListAndCrossBranchManagerAreDenied() throws Exception {
-        String placed = placeGuestOrder();
-        long id = json.readTree(placed).get("id").asLong();
+    void anonymousListAndOtherBranchStaffAreDenied() throws Exception {
+        long id = json.readTree(guestOrder("TAKEAWAY")).get("id").asLong();
         mvc.perform(get("/api/orders")).andExpect(status().isUnauthorized());
 
-        User unrelated = users.save(new User("Unrelated Customer", "unrelated-" + java.util.UUID.randomUUID()
-                + "@example.com", "secret", Role.CUSTOMER, UserStatus.ACTIVE));
+        User unrelated = fixtures.customer();
         mvc.perform(get("/api/orders/{id}", id).with(user(unrelated.getEmail()).roles("CUSTOMER")))
                 .andExpect(status().isForbidden());
 
-        User manager = new User("Remote Manager", "remote-manager-test@example.com", "secret",
-                Role.BRANCH_MANAGER, UserStatus.APPROVED);
-        manager.setBranchId(3L);
-        manager = users.save(manager);
+        Branch other = fixtures.branch();
+        User remoteStaff = fixtures.user(Role.STAFF, other.getId());
         mvc.perform(put("/api/orders/{id}/status", id)
-                        .with(user(manager.getEmail()).roles("BRANCH_MANAGER"))
+                        .with(user(remoteStaff.getEmail()).roles("STAFF"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"CONFIRMED\"}"))
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    void codDeliveryRequiresCashBeforeCompletion() throws Exception {
-        String suffix = java.util.UUID.randomUUID().toString().substring(0, 8);
-        User customer = users.save(new User("Customer", "customer-" + suffix + "@example.com", "secret",
-                Role.CUSTOMER, UserStatus.ACTIVE));
-        User manager = new User("Manager", "manager-" + suffix + "@example.com", "secret",
-                Role.BRANCH_MANAGER, UserStatus.APPROVED);
-        manager.setBranchId(1L);
-        manager = users.save(manager);
-        User rider = new User("Rider", "rider-" + suffix + "@example.com", "secret",
-                Role.DELIVERY_PARTNER, UserStatus.APPROVED);
-        rider.setBranchId(1L);
-        rider = users.save(rider);
+    void branchManagerSeesOrdersButCannotChangeThem() throws Exception {
+        long id = json.readTree(guestOrder("TAKEAWAY")).get("id").asLong();
+        User manager = fixtures.user(Role.BRANCH_MANAGER, branch.getId());
+        mvc.perform(get("/api/orders/{id}", id).with(user(manager.getEmail()).roles("BRANCH_MANAGER")))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/orders").with(user(manager.getEmail()).roles("BRANCH_MANAGER")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(id));
+        mvc.perform(post("/api/orders/{id}/accept", id).with(user(manager.getEmail()).roles("BRANCH_MANAGER")))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error").value("STAFF_REQUIRED"));
+        mvc.perform(post("/api/orders/{id}/cancel", id).with(user(manager.getEmail()).roles("BRANCH_MANAGER")))
+                .andExpect(status().isForbidden());
+    }
 
-        String placed = mvc.perform(post("/api/orders")
-                        .with(user(customer.getEmail()).roles("CUSTOMER"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"customerId":9999,"branchId":1,"fulfillmentType":"DELIVERY",
-                                 "deliveryAddress":"42 Galle Road", "items":[{"menuItemId":101,"quantity":1}]}
-                                """))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.customerId").value(customer.getId()))
-                .andReturn().getResponse().getContentAsString();
-        long id = json.readTree(placed).get("id").asLong();
+    @Test
+    void codDeliveryWaitsForStaffAndRequiresCashBeforeCompletion() throws Exception {
+        User customer = fixtures.customer();
+        User staff = fixtures.user(Role.STAFF, branch.getId());
+        User rider = fixtures.user(Role.DELIVERY_PARTNER, branch.getId());
+        long id = json.readTree(customerOrder(customer, "DELIVERY")).get("id").asLong();
 
         mvc.perform(post("/api/orders/{id}/payment", id)
                         .with(user(customer.getEmail()).roles("CUSTOMER"))
                         .header("Idempotency-Key", "cod-" + id)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"method\":\"CASH_ON_DELIVERY\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CONFIRMED"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PLACED"))
+                .andExpect(jsonPath("$.awaitingAcceptance").value(true))
                 .andExpect(jsonPath("$.paymentStatus").value("PENDING"));
         mvc.perform(put("/api/orders/{id}/status", id)
-                        .with(user(manager.getEmail()).roles("BRANCH_MANAGER"))
+                        .with(user(staff.getEmail()).roles("STAFF"))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"PREPARING\"}"))
-                .andExpect(status().isOk());
+                .andExpect(status().isConflict());
+        mvc.perform(post("/api/orders/{id}/accept", id).with(user(staff.getEmail()).roles("STAFF")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CONFIRMED"))
+                .andExpect(jsonPath("$.awaitingAcceptance").value(false));
+        moveAs(staff, "STAFF", id, "{\"status\":\"PREPARING\"}");
+        mvc.perform(get("/api/orders/riders").with(user(staff.getEmail()).roles("STAFF")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].riderId").value(rider.getId()));
         mvc.perform(put("/api/orders/{id}/status", id)
-                        .with(user(manager.getEmail()).roles("BRANCH_MANAGER"))
+                        .with(user(staff.getEmail()).roles("STAFF"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"OUT_FOR_DELIVERY\",\"riderId\":" + rider.getId() + "}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.riderId").value(rider.getId()))
+                .andExpect(jsonPath("$.riderName").value(rider.getName()));
+        mvc.perform(get("/api/orders/{id}/tracking", id).with(user(customer.getEmail()).roles("CUSTOMER")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.riderId").value(rider.getId()));
         mvc.perform(put("/api/orders/{id}/status", id)
                         .with(user(rider.getEmail()).roles("DELIVERY_PARTNER"))
@@ -150,22 +174,22 @@ class OrderHttpSecurityTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("DELIVERED"))
                 .andExpect(jsonPath("$.paymentStatus").value("VERIFIED"))
                 .andExpect(jsonPath("$.changeGiven").value(440.00));
-        mvc.perform(put("/api/orders/{id}/status", id)
-                        .with(user(rider.getEmail()).roles("DELIVERY_PARTNER"))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"COMPLETED\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));
+        moveAs(rider, "DELIVERY_PARTNER", id, "{\"status\":\"COMPLETED\"}");
+
+        assertTrue(sales.existsByOrderNumber(OrderSalesRecorder.orderNumberFor(id)),
+                "a completed order is recorded as a branch sale");
     }
 
     @Test
-    void paidGuestCancellationUsesMockRefund() throws Exception {
-        String placed = placeGuestOrder();
+    void paidGuestCancellationBeforeAcceptanceUsesMockRefund() throws Exception {
+        String placed = guestOrder("TAKEAWAY");
         long id = json.readTree(placed).get("id").asLong();
         String token = json.readTree(placed).get("guestToken").asText();
         mvc.perform(post("/api/orders/{id}/payment", id)
                         .header("X-Guest-Token", token)
                         .header("Idempotency-Key", "paid-guest-" + id)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"method\":\"DEBIT_CARD\",\"success\":true}"))
+                        .content(cardPayment("DEBIT_CARD", APPROVED_CARD)))
                 .andExpect(status().isOk());
         mvc.perform(post("/api/orders/{id}/cancel", id).header("X-Guest-Token", token))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"))
@@ -175,72 +199,53 @@ class OrderHttpSecurityTest {
 
     @Test
     void codTakeawayCollectsAtCounterAndCompletesInOneCall() throws Exception {
-        User customer = users.save(new User("Takeaway Customer", "takeaway-" + java.util.UUID.randomUUID()
-                + "@example.com", "secret", Role.CUSTOMER, UserStatus.ACTIVE));
-        User manager = staff(Role.BRANCH_MANAGER, 1L);
-        String placed = mvc.perform(post("/api/orders")
-                        .with(user(customer.getEmail()).roles("CUSTOMER"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"branchId":1,"fulfillmentType":"TAKEAWAY",
-                                 "items":[{"menuItemId":101,"quantity":1}]}
-                                """))
-                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-        long id = json.readTree(placed).get("id").asLong();
+        User customer = fixtures.customer();
+        User staff = fixtures.user(Role.STAFF, branch.getId());
+        long id = json.readTree(customerOrder(customer, "TAKEAWAY")).get("id").asLong();
         mvc.perform(post("/api/orders/{id}/payment", id)
                         .with(user(customer.getEmail()).roles("CUSTOMER"))
                         .header("Idempotency-Key", "takeaway-cod-" + id)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"method\":\"CASH_ON_DELIVERY\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CONFIRMED"));
-        for (String statusName : new String[]{"PREPARING", "READY_FOR_PICKUP"}) {
-            mvc.perform(put("/api/orders/{id}/status", id)
-                            .with(user(manager.getEmail()).roles("BRANCH_MANAGER"))
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"status\":\"" + statusName + "\"}"))
-                    .andExpect(status().isOk());
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PLACED"));
+        for (String statusName : new String[]{"CONFIRMED", "PREPARING", "READY_FOR_PICKUP"}) {
+            moveAs(staff, "STAFF", id, "{\"status\":\"" + statusName + "\"}");
         }
         mvc.perform(post("/api/orders/{id}/cod/collect", id)
-                        .with(user(manager.getEmail()).roles("BRANCH_MANAGER"))
+                        .with(user(staff.getEmail()).roles("STAFF"))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"cashCollected\":1000.00}"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.error").value("INSUFFICIENT_CASH"));
         mvc.perform(post("/api/orders/{id}/cod/collect", id)
-                        .with(user(manager.getEmail()).roles("BRANCH_MANAGER"))
+                        .with(user(staff.getEmail()).roles("STAFF"))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"cashCollected\":1300.00}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.changeGiven").value(40.00));
     }
 
     @Test
-    void cardDeliveryCompletesAndPreparationLocksCancellation() throws Exception {
-        String placed = placeGuestDeliveryOrder();
+    void cardDeliveryCompletesAndPreparationRequiresCancelRequest() throws Exception {
+        String placed = guestOrder("DELIVERY");
         long id = json.readTree(placed).get("id").asLong();
         String token = json.readTree(placed).get("guestToken").asText();
-        User manager = staff(Role.BRANCH_MANAGER, 1L);
-        User rider = staff(Role.DELIVERY_PARTNER, 1L);
+        User staff = fixtures.user(Role.STAFF, branch.getId());
+        User rider = fixtures.user(Role.DELIVERY_PARTNER, branch.getId());
         mvc.perform(post("/api/orders/{id}/payment", id)
                         .header("X-Guest-Token", token)
                         .header("Idempotency-Key", "card-delivery-" + id)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"method\":\"CREDIT_CARD\",\"success\":true}"))
+                        .content(cardPayment("CREDIT_CARD", APPROVED_CARD)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PAYMENT_VERIFIED"));
         for (String statusName : new String[]{"CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY", "DELIVERED", "COMPLETED"}) {
-            String actorEmail = (statusName.equals("DELIVERED") || statusName.equals("COMPLETED"))
-                    ? rider.getEmail() : manager.getEmail();
-            String role = (statusName.equals("DELIVERED") || statusName.equals("COMPLETED"))
-                    ? "DELIVERY_PARTNER" : "BRANCH_MANAGER";
+            boolean riderStep = statusName.equals("DELIVERED") || statusName.equals("COMPLETED");
             String body = statusName.equals("OUT_FOR_DELIVERY")
                     ? "{\"status\":\"OUT_FOR_DELIVERY\",\"riderId\":" + rider.getId() + "}"
                     : "{\"status\":\"" + statusName + "\"}";
-            mvc.perform(put("/api/orders/{id}/status", id)
-                            .with(user(actorEmail).roles(role))
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(body))
-                    .andExpect(status().isOk());
+            moveAs(riderStep ? rider : staff, riderStep ? "DELIVERY_PARTNER" : "STAFF", id, body);
             if (statusName.equals("PREPARING")) {
                 mvc.perform(post("/api/orders/{id}/cancel", id).header("X-Guest-Token", token))
-                        .andExpect(status().isConflict());
+                        .andExpect(status().isConflict())
+                        .andExpect(jsonPath("$.error").value("CANCEL_REQUEST_REQUIRED"));
             }
         }
         mvc.perform(get("/api/orders/{id}/history", id).header("X-Guest-Token", token))

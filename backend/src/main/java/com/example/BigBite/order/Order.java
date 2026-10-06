@@ -1,5 +1,7 @@
 package com.example.BigBite.order;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -59,6 +61,7 @@ public class Order {
     private String branchAddressSnapshot;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "fulfillment_type", nullable = false)
     private FulfillmentType fulfillmentType;
 
@@ -66,6 +69,7 @@ public class Order {
     private String deliveryAddress;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "status", nullable = false)
     private OrderStatus status = OrderStatus.PLACED;
 
@@ -88,14 +92,17 @@ public class Order {
     private String promoCode;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "payment_status", nullable = false)
     private PaymentStatus paymentStatus = PaymentStatus.PENDING;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "refund_status", nullable = false)
     private RefundStatus refundStatus = RefundStatus.NOT_APPLICABLE;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "payment_method", nullable = true)
     private PaymentMethod paymentMethod;
 
@@ -138,6 +145,45 @@ public class Order {
 
     @Column(name = "guest_access_nonce", length = 64)
     private String guestAccessNonce;
+
+    /** Set when the order starts waiting for staff to accept it (COD selected or card verified). */
+    @Column(name = "awaiting_acceptance_since")
+    private LocalDateTime awaitingAcceptanceSince;
+
+    @Column(name = "accepted_at")
+    private LocalDateTime acceptedAt;
+
+    @Column(name = "accepted_by")
+    private Long acceptedBy;
+
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "cancel_request_status", length = 16)
+    private CancelRequestStatus cancelRequestStatus;
+
+    @Column(name = "cancel_request_reason", length = 255)
+    private String cancelRequestReason;
+
+    @Column(name = "cancel_requested_at")
+    private LocalDateTime cancelRequestedAt;
+
+    @Column(name = "cancel_request_note", length = 255)
+    private String cancelRequestNote;
+
+    @Column(name = "card_brand", length = 16)
+    private String cardBrand;
+
+    @Column(name = "card_last4", length = 4)
+    private String cardLast4;
+
+    @Column(name = "refund_attempts", nullable = false, columnDefinition = "integer default 0")
+    private int refundAttempts;
+
+    @Column(name = "last_refund_attempt_at")
+    private LocalDateTime lastRefundAttemptAt;
+
+    @Column(name = "refund_reference", length = 64)
+    private String refundReference;
 
     @Column(name = "idempotency_key", nullable = true, unique = true, length = 100)
     private String idempotencyKey;
@@ -449,4 +495,34 @@ public class Order {
     public void setDeliveredAt(LocalDateTime deliveredAt) { this.deliveredAt = deliveredAt; }
     public String getGuestAccessNonce() { return guestAccessNonce; }
     public void setGuestAccessNonce(String guestAccessNonce) { this.guestAccessNonce = guestAccessNonce; }
+    public LocalDateTime getAwaitingAcceptanceSince() { return awaitingAcceptanceSince; }
+    public void setAwaitingAcceptanceSince(LocalDateTime awaitingAcceptanceSince) { this.awaitingAcceptanceSince = awaitingAcceptanceSince; }
+    public LocalDateTime getAcceptedAt() { return acceptedAt; }
+    public void setAcceptedAt(LocalDateTime acceptedAt) { this.acceptedAt = acceptedAt; }
+    public Long getAcceptedBy() { return acceptedBy; }
+    public void setAcceptedBy(Long acceptedBy) { this.acceptedBy = acceptedBy; }
+    public CancelRequestStatus getCancelRequestStatus() { return cancelRequestStatus; }
+    public void setCancelRequestStatus(CancelRequestStatus cancelRequestStatus) { this.cancelRequestStatus = cancelRequestStatus; }
+    public String getCancelRequestReason() { return cancelRequestReason; }
+    public void setCancelRequestReason(String cancelRequestReason) { this.cancelRequestReason = cancelRequestReason; }
+    public LocalDateTime getCancelRequestedAt() { return cancelRequestedAt; }
+    public void setCancelRequestedAt(LocalDateTime cancelRequestedAt) { this.cancelRequestedAt = cancelRequestedAt; }
+    public String getCancelRequestNote() { return cancelRequestNote; }
+    public void setCancelRequestNote(String cancelRequestNote) { this.cancelRequestNote = cancelRequestNote; }
+    public String getCardBrand() { return cardBrand; }
+    public void setCardBrand(String cardBrand) { this.cardBrand = cardBrand; }
+    public String getCardLast4() { return cardLast4; }
+    public void setCardLast4(String cardLast4) { this.cardLast4 = cardLast4; }
+    public int getRefundAttempts() { return refundAttempts; }
+    public void setRefundAttempts(int refundAttempts) { this.refundAttempts = refundAttempts; }
+    public LocalDateTime getLastRefundAttemptAt() { return lastRefundAttemptAt; }
+    public void setLastRefundAttemptAt(LocalDateTime lastRefundAttemptAt) { this.lastRefundAttemptAt = lastRefundAttemptAt; }
+    public String getRefundReference() { return refundReference; }
+    public void setRefundReference(String refundReference) { this.refundReference = refundReference; }
+
+    /** Waiting for branch staff to accept: COD chosen (still PLACED) or card already verified. */
+    public boolean isAwaitingAcceptance() {
+        return status == OrderStatus.PAYMENT_VERIFIED
+                || (status == OrderStatus.PLACED && paymentMethod == PaymentMethod.CASH_ON_DELIVERY);
+    }
 }

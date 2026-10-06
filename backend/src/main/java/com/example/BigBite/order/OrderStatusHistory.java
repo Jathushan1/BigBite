@@ -1,5 +1,7 @@
 package com.example.BigBite.order;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -23,10 +25,12 @@ public class OrderStatusHistory {
     private Long orderId;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "from_status", length = 32)
     private OrderStatus fromStatus;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "to_status", nullable = false, length = 32)
     private OrderStatus toStatus;
 

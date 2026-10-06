@@ -1,5 +1,6 @@
 package com.example.BigBite.order.dto;
 
+import com.example.BigBite.order.CancelRequestStatus;
 import com.example.BigBite.order.FulfillmentType;
 import com.example.BigBite.order.OrderStatus;
 import com.example.BigBite.order.PaymentMethod;
@@ -52,6 +53,18 @@ public class OrderResponseDto {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<OrderItemResponseDto> items;
+    private String riderName;
+    private String riderPhone;
+    private boolean awaitingAcceptance;
+    private LocalDateTime awaitingAcceptanceSince;
+    private LocalDateTime acceptedAt;
+    private CancelRequestStatus cancelRequestStatus;
+    private String cancelRequestReason;
+    private LocalDateTime cancelRequestedAt;
+    private String cancelRequestNote;
+    private String cardBrand;
+    private String cardLast4;
+    private int refundAttempts;
 
     public OrderResponseDto() {
     }
@@ -300,5 +313,29 @@ public class OrderResponseDto {
     public void setDeliveredAt(LocalDateTime deliveredAt) { this.deliveredAt = deliveredAt; }
     public String getGuestToken() { return guestToken; }
     public void setGuestToken(String guestToken) { this.guestToken = guestToken; }
-}
 
+    public String getRiderName() { return riderName; }
+    public void setRiderName(String riderName) { this.riderName = riderName; }
+    public String getRiderPhone() { return riderPhone; }
+    public void setRiderPhone(String riderPhone) { this.riderPhone = riderPhone; }
+    public boolean isAwaitingAcceptance() { return awaitingAcceptance; }
+    public void setAwaitingAcceptance(boolean awaitingAcceptance) { this.awaitingAcceptance = awaitingAcceptance; }
+    public LocalDateTime getAwaitingAcceptanceSince() { return awaitingAcceptanceSince; }
+    public void setAwaitingAcceptanceSince(LocalDateTime awaitingAcceptanceSince) { this.awaitingAcceptanceSince = awaitingAcceptanceSince; }
+    public LocalDateTime getAcceptedAt() { return acceptedAt; }
+    public void setAcceptedAt(LocalDateTime acceptedAt) { this.acceptedAt = acceptedAt; }
+    public CancelRequestStatus getCancelRequestStatus() { return cancelRequestStatus; }
+    public void setCancelRequestStatus(CancelRequestStatus cancelRequestStatus) { this.cancelRequestStatus = cancelRequestStatus; }
+    public String getCancelRequestReason() { return cancelRequestReason; }
+    public void setCancelRequestReason(String cancelRequestReason) { this.cancelRequestReason = cancelRequestReason; }
+    public LocalDateTime getCancelRequestedAt() { return cancelRequestedAt; }
+    public void setCancelRequestedAt(LocalDateTime cancelRequestedAt) { this.cancelRequestedAt = cancelRequestedAt; }
+    public String getCancelRequestNote() { return cancelRequestNote; }
+    public void setCancelRequestNote(String cancelRequestNote) { this.cancelRequestNote = cancelRequestNote; }
+    public String getCardBrand() { return cardBrand; }
+    public void setCardBrand(String cardBrand) { this.cardBrand = cardBrand; }
+    public String getCardLast4() { return cardLast4; }
+    public void setCardLast4(String cardLast4) { this.cardLast4 = cardLast4; }
+    public int getRefundAttempts() { return refundAttempts; }
+    public void setRefundAttempts(int refundAttempts) { this.refundAttempts = refundAttempts; }
+}

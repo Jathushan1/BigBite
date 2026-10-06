@@ -25,6 +25,12 @@ public class BranchDto {
     @JsonFormat(pattern = "HH:mm")
     private LocalTime closingTime;
 
+    private boolean takeawayEnabled;
+
+    private boolean codEnabled;
+
+    private boolean openNow;
+
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createdAt;
 
@@ -50,6 +56,9 @@ public class BranchDto {
         dto.setStatus(branch.getStatus());
         dto.setOpeningTime(branch.getOpeningTime());
         dto.setClosingTime(branch.getClosingTime());
+        dto.setTakeawayEnabled(branch.isTakeawayEnabled());
+        dto.setCodEnabled(branch.isCodEnabled());
+        dto.setOpenNow(branch.isOpenAt(java.time.LocalTime.now()));
         dto.setCreatedAt(branch.getCreatedAt());
         dto.setUpdatedAt(branch.getUpdatedAt());
         return dto;
@@ -166,5 +175,29 @@ public class BranchDto {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public boolean isTakeawayEnabled() {
+        return takeawayEnabled;
+    }
+
+    public void setTakeawayEnabled(boolean takeawayEnabled) {
+        this.takeawayEnabled = takeawayEnabled;
+    }
+
+    public boolean isCodEnabled() {
+        return codEnabled;
+    }
+
+    public void setCodEnabled(boolean codEnabled) {
+        this.codEnabled = codEnabled;
+    }
+
+    public boolean isOpenNow() {
+        return openNow;
+    }
+
+    public void setOpenNow(boolean openNow) {
+        this.openNow = openNow;
     }
 }

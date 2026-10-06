@@ -7,9 +7,12 @@ import com.example.BigBite.order.dto.OrderRequestDto;
 import com.example.BigBite.order.dto.OrderResponseDto;
 import com.example.BigBite.order.dto.PaymentRequestDto;
 import com.example.BigBite.order.external.BranchLookupService;
-import com.example.BigBite.order.external.InventoryCheckService;
+import com.example.BigBite.order.external.ComplaintService;
+import com.example.BigBite.order.external.DeliveryService;
+import com.example.BigBite.order.external.InventoryService;
 import com.example.BigBite.order.external.MenuLookupService;
-import com.example.BigBite.order.external.PromotionValidationService;
+import com.example.BigBite.order.external.PromotionService;
+import com.example.BigBite.order.external.ReviewService;
 import com.example.BigBite.order.external.PaymentGateway;
 import com.example.BigBite.order.external.RefundGateway;
 import com.example.BigBite.auth.UserRepository;
@@ -18,7 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Answers;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -47,11 +49,29 @@ class OrderServiceTest {
     @Mock
     private MenuLookupService menuLookupService;
 
-    @Mock(answer = Answers.CALLS_REAL_METHODS)
-    private PromotionValidationService promotionValidationService;
+    @Mock
+    private PromotionService promotionService;
 
-    @Mock(answer = Answers.CALLS_REAL_METHODS)
-    private InventoryCheckService inventoryCheckService;
+    @Mock
+    private InventoryService inventoryService;
+
+    @Mock
+    private DeliveryService deliveryService;
+
+    @Mock
+    private ReviewService reviewService;
+
+    @Mock
+    private ComplaintService complaintService;
+
+    private static final PaymentRequestDto.CardDto APPROVED_CARD =
+            new PaymentRequestDto.CardDto("Test Customer", "4242 4242 4242 4242", 12, 2035, "123");
+    private static final PaymentRequestDto.CardDto DECLINED_CARD =
+            new PaymentRequestDto.CardDto("Test Customer", "4000000000000002", 12, 2035, "123");
+
+    private static PaymentRequestDto card(PaymentMethod method, PaymentRequestDto.CardDto card) {
+        return new PaymentRequestDto(method, card);
+    }
 
     @Mock
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
@@ -90,7 +110,7 @@ class OrderServiceTest {
     private OrderService orderService;
 
     @Test
-    @DisplayName("Cancellation rejected once status is PREPARING or later")
+    @DisplayName("Customers must request cancellation once preparing; later statuses are locked")
     void testCancellationRejectedWhenPreparingOrLater() {
         // Test for PREPARING
         Order orderPreparing = new Order();
@@ -100,7 +120,7 @@ class OrderServiceTest {
         when(orderRepository.findById(1L)).thenReturn(Optional.of(orderPreparing));
 
         OrderApiException ex1 = assertThrows(OrderApiException.class, () -> orderService.cancelOrder(1L, null, null));
-        assertTrue(ex1.getMessage().contains("Order can no longer be cancelled"));
+        assertEquals("CANCEL_REQUEST_REQUIRED", ex1.getCode());
 
         // Test for OUT_FOR_DELIVERY
         Order orderDelivery = new Order();
@@ -211,10 +231,10 @@ class OrderServiceTest {
         when(menuLookupService.getItem(101L))
                 .thenReturn(new MenuLookupService.MenuItemInfo(101L, "Margherita Pizza", new BigDecimal("1200"), 1L));
         when(menuLookupService.isAvailable(101L)).thenReturn(true);
-        when(inventoryCheckService.isInStock(101L, 2)).thenReturn(true);
+        lenient().when(inventoryService.canReserve(any(), any())).thenReturn(true);
 
-        when(promotionValidationService.validate(eq("WELCOME10"), any(BigDecimal.class)))
-                .thenReturn(new PromotionValidationService.DiscountResult(true, new BigDecimal("240.00"), "Applied 10%"));
+        when(promotionService.calculateDiscount(eq("WELCOME10"), any(BigDecimal.class)))
+                .thenReturn(new BigDecimal("240.00"));
 
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order o = invocation.getArgument(0);
@@ -236,8 +256,8 @@ class OrderServiceTest {
 
         // Invalid promo codes are rejected before an order is saved.
         request.setPromoCode("INVALID_CODE");
-        when(promotionValidationService.validate(eq("INVALID_CODE"), any(BigDecimal.class)))
-                .thenReturn(new PromotionValidationService.DiscountResult(false, BigDecimal.ZERO, "Invalid promo code"));
+        when(promotionService.calculateDiscount(eq("INVALID_CODE"), any(BigDecimal.class)))
+                .thenThrow(new IllegalArgumentException("Invalid promo code"));
 
         OrderApiException error = assertThrows(OrderApiException.class, () -> orderService.placeOrder(request));
         assertEquals("INVALID_PROMO", error.getCode());
@@ -263,16 +283,16 @@ class OrderServiceTest {
         when(menuLookupService.getItem(101L))
                 .thenReturn(new MenuLookupService.MenuItemInfo(101L, "Margherita Pizza", new BigDecimal("1200"), 1L));
         when(menuLookupService.isAvailable(101L)).thenReturn(true);
-        when(inventoryCheckService.isInStock(101L, 2)).thenReturn(true);
+        lenient().when(inventoryService.canReserve(any(), any())).thenReturn(true);
 
         when(menuLookupService.getItem(103L))
                 .thenReturn(new MenuLookupService.MenuItemInfo(103L, "Garlic Bread", new BigDecimal("450"), 1L));
         when(menuLookupService.isAvailable(103L)).thenReturn(true);
-        when(inventoryCheckService.isInStock(103L, 1)).thenReturn(true);
+        lenient().when(inventoryService.canReserve(any(), any())).thenReturn(true);
 
         // 10% of 2850 = 285.00
-        when(promotionValidationService.validate(eq("WELCOME10"), eq(new BigDecimal("2850.00"))))
-                .thenReturn(new PromotionValidationService.DiscountResult(true, new BigDecimal("285.00"), "Applied 10%"));
+        when(promotionService.calculateDiscount(eq("WELCOME10"), eq(new BigDecimal("2850.00"))))
+                .thenReturn(new BigDecimal("285.00"));
 
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order o = invocation.getArgument(0);
@@ -327,13 +347,16 @@ class OrderServiceTest {
 
         when(orderRepository.findByIdForUpdate(15L)).thenReturn(Optional.of(order));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(paymentGateway.charge(any(BigDecimal.class), eq(true), anyString()))
-                .thenReturn(new PaymentGateway.GatewayResult(true, "MOCK-CARD-15"));
+        when(paymentGateway.charge(any(BigDecimal.class), any(PaymentGateway.CardDetails.class), anyString()))
+                .thenReturn(PaymentGateway.GatewayResult.approved("MOCK-CARD-15", "VISA", "4242"))
+                .thenReturn(PaymentGateway.GatewayResult.declined("CARD_DECLINED", "Your card was declined", "VISA", "0002"));
 
-        OrderResponseDto response = orderService.recordPayment(15L, true);
+        OrderResponseDto response = orderService.recordPayment(15L, card(PaymentMethod.CREDIT_CARD, APPROVED_CARD));
 
         assertEquals(PaymentStatus.VERIFIED, response.getPaymentStatus());
         assertEquals(OrderStatus.PAYMENT_VERIFIED, response.getStatus());
+        assertTrue(response.isAwaitingAcceptance());
+        assertEquals("4242", response.getCardLast4());
 
         // Test payment failure
         Order order2 = new Order();
@@ -342,16 +365,13 @@ class OrderServiceTest {
         order2.setPaymentStatus(PaymentStatus.PENDING);
 
         when(orderRepository.findByIdForUpdate(16L)).thenReturn(Optional.of(order2));
-        when(paymentGateway.charge(any(BigDecimal.class), eq(false), anyString()))
-                .thenReturn(new PaymentGateway.GatewayResult(false, null));
-
-        OrderResponseDto failResponse = orderService.recordPayment(16L, false);
+        OrderResponseDto failResponse = orderService.recordPayment(16L, card(PaymentMethod.CREDIT_CARD, DECLINED_CARD));
         assertEquals(PaymentStatus.FAILED, failResponse.getPaymentStatus());
         assertEquals(OrderStatus.PLACED, failResponse.getStatus());
     }
 
     @Test
-    @DisplayName("Cash on delivery bypasses payment verification and confirms the order")
+    @DisplayName("Cash on delivery keeps the order PLACED until branch staff accept it")
     void testCodPaymentLimit() {
         // Order under 3000
         Order orderUnder = new Order();
@@ -363,10 +383,11 @@ class OrderServiceTest {
         when(orderRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(orderUnder));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        PaymentRequestDto codReq = new PaymentRequestDto(PaymentMethod.CASH_ON_DELIVERY, true);
+        PaymentRequestDto codReq = PaymentRequestDto.cod();
         OrderResponseDto response = orderService.recordPayment(20L, codReq);
 
-        assertEquals(OrderStatus.CONFIRMED, response.getStatus());
+        assertEquals(OrderStatus.PLACED, response.getStatus());
+        assertTrue(response.isAwaitingAcceptance());
         assertEquals(PaymentStatus.PENDING, response.getPaymentStatus());
         assertEquals(PaymentMethod.CASH_ON_DELIVERY, response.getPaymentMethod());
 
@@ -413,7 +434,7 @@ class OrderServiceTest {
         when(menuLookupService.getItem(101L))
                 .thenReturn(new MenuLookupService.MenuItemInfo(101L, "Margherita Pizza", new BigDecimal("1200"), 1L));
         when(menuLookupService.isAvailable(101L)).thenReturn(true);
-        when(inventoryCheckService.isInStock(101L, 1)).thenReturn(true);
+        lenient().when(inventoryService.canReserve(any(), any())).thenReturn(true);
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         OrderResponseDto res3 = orderService.placeOrder(req3);
@@ -446,7 +467,7 @@ class OrderServiceTest {
         when(menuLookupService.getItem(101L))
                 .thenReturn(new MenuLookupService.MenuItemInfo(101L, "Margherita Pizza", new BigDecimal("1200"), 1L));
         when(menuLookupService.isAvailable(101L)).thenReturn(true);
-        when(inventoryCheckService.isInStock(101L, 1)).thenReturn(true);
+        lenient().when(inventoryService.canReserve(any(), any())).thenReturn(true);
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(savedAddressRepository.existsByCustomerIdAndAddressLine(99L, "123 Duplication Road, Colombo 04")).thenReturn(false);
 
@@ -508,7 +529,7 @@ class OrderServiceTest {
         when(menuLookupService.getItem(101L))
                 .thenReturn(new MenuLookupService.MenuItemInfo(101L, "Margherita Pizza", new BigDecimal("1200"), 1L));
         when(menuLookupService.isAvailable(101L)).thenReturn(true);
-        when(inventoryCheckService.isInStock(101L, 1)).thenReturn(true);
+        lenient().when(inventoryService.canReserve(any(), any())).thenReturn(true);
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         OrderResponseDto response = orderService.placeOrder(request);
@@ -542,7 +563,7 @@ class OrderServiceTest {
         when(orderRepository.save(any(Order.class))).thenAnswer(i -> i.getArgument(0));
 
         // Change item1 qty from 1 to 2
-        when(inventoryCheckService.isInStock(101L, 1)).thenReturn(true);
+        lenient().when(inventoryService.canReserve(any(), any())).thenReturn(true);
         OrderResponseDto response = orderService.updateOrderItem(10L, 1L, 2);
 
         assertNotNull(response);
@@ -626,7 +647,7 @@ class OrderServiceTest {
     void testCancelOrder_VerifiedPayment_SetsRefundPending() {
         Order order = new Order();
         order.setId(20L);
-        order.setStatus(OrderStatus.CONFIRMED);
+        order.setStatus(OrderStatus.PAYMENT_VERIFIED);
         order.setPaymentStatus(PaymentStatus.VERIFIED);
         order.setRefundStatus(RefundStatus.NOT_APPLICABLE);
 
@@ -812,8 +833,8 @@ class OrderServiceTest {
         order.setGrandTotal(new BigDecimal("1260.00"));
         when(orderRepository.findByIdForUpdate(90L)).thenReturn(Optional.of(order));
         when(orderRepository.save(any(Order.class))).thenAnswer(i -> i.getArgument(0));
-        when(paymentGateway.charge(new BigDecimal("1260.00"), true, "payment-key"))
-                .thenReturn(new PaymentGateway.GatewayResult(true, "MOCK-90"));
+        when(paymentGateway.charge(eq(new BigDecimal("1260.00")), any(PaymentGateway.CardDetails.class), eq("payment-key")))
+                .thenReturn(PaymentGateway.GatewayResult.approved("MOCK-90", "VISA", "4242"));
         java.util.concurrent.atomic.AtomicReference<PaymentAttempt> attempt = new java.util.concurrent.atomic.AtomicReference<>();
         when(paymentAttemptRepository.findByIdempotencyKey("payment-key"))
                 .thenAnswer(i -> Optional.ofNullable(attempt.get()));
@@ -822,14 +843,14 @@ class OrderServiceTest {
             return i.getArgument(0);
         });
 
-        PaymentRequestDto request = new PaymentRequestDto(PaymentMethod.CREDIT_CARD, true);
+        PaymentRequestDto request = card(PaymentMethod.CREDIT_CARD, APPROVED_CARD);
         OrderService.PaymentResult first = orderService.recordPayment(90L, request, "payment-key");
         assertEquals(OrderStatus.PAYMENT_VERIFIED, first.order().getStatus());
         order.setStatus(OrderStatus.CONFIRMED);
         OrderService.PaymentResult retry = orderService.recordPayment(90L, request, "payment-key");
         assertEquals(OrderStatus.PAYMENT_VERIFIED, retry.order().getStatus());
         assertEquals("MOCK-90", retry.order().getPaymentReference());
-        verify(paymentGateway, times(1)).charge(any(), anyBoolean(), anyString());
+        verify(paymentGateway, times(1)).charge(any(), any(), anyString());
     }
 
     @Test
@@ -842,9 +863,9 @@ class OrderServiceTest {
         order.setGrandTotal(new BigDecimal("1260.00"));
         when(orderRepository.findByIdForUpdate(91L)).thenReturn(Optional.of(order));
         when(orderRepository.save(any(Order.class))).thenAnswer(i -> i.getArgument(0));
-        when(paymentGateway.charge(any(), eq(false), anyString()))
-                .thenReturn(new PaymentGateway.GatewayResult(false, null));
-        PaymentRequestDto request = new PaymentRequestDto(PaymentMethod.DEBIT_CARD, false);
+        when(paymentGateway.charge(any(), any(), anyString()))
+                .thenReturn(PaymentGateway.GatewayResult.declined("CARD_DECLINED", "Your card was declined", "VISA", "0002"));
+        PaymentRequestDto request = card(PaymentMethod.DEBIT_CARD, DECLINED_CARD);
 
         for (int attempt = 1; attempt <= 3; attempt++) {
             OrderService.PaymentResult result = orderService.recordPayment(91L, request, "decline-" + attempt);

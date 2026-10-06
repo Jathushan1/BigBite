@@ -11,14 +11,20 @@ import com.example.BigBite.order.dto.PaymentOptionsDto;
 import com.example.BigBite.order.dto.CodCollectRequestDto;
 import com.example.BigBite.order.dto.DeliveryFailedRequestDto;
 import com.example.BigBite.order.dto.CancelOrderRequestDto;
-import jakarta.persistence.OptimisticLockException;
+import com.example.BigBite.order.dto.ComplaintRequestDto;
+import com.example.BigBite.order.dto.DecisionNoteDto;
+import com.example.BigBite.order.dto.FeedbackDto;
+import com.example.BigBite.order.dto.OrderStatusHistoryDto;
+import com.example.BigBite.order.dto.ReasonRequestDto;
+import com.example.BigBite.order.dto.ReviewRequestDto;
+import com.example.BigBite.order.dto.SavedAddressDto;
+import com.example.BigBite.order.external.ComplaintService;
+import com.example.BigBite.order.external.DeliveryService;
+import com.example.BigBite.order.external.ReviewService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
-import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,16 +36,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import com.example.BigBite.auth.Role;
 import com.example.BigBite.auth.User;
 import com.example.BigBite.auth.UserRepository;
-import com.example.BigBite.auth.UserStatus;
-import com.example.BigBite.auth.dto.UserDto;
-import com.example.BigBite.order.dto.PaymentIntentResponseDto;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 
@@ -130,7 +133,7 @@ public class OrderController {
         if (user.getRole() == Role.CUSTOMER) {
             customerId = user.getId();
             branchId = null;
-        } else if (user.getRole() == Role.BRANCH_MANAGER || user.getRole() == Role.DELIVERY_PARTNER) {
+        } else if (user.getRole().isBranchScopedStaff()) {
             customerId = null;
             if (branchId == null) branchId = user.getBranchId();
         }
@@ -140,16 +143,48 @@ public class OrderController {
     }
 
     @GetMapping("/riders")
-    public ResponseEntity<List<UserDto>> getBranchRiders(@AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<List<DeliveryService.RiderAvailability>> getBranchRiders(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(orderService.getRidersFor(getAuthenticatedUser(userDetails)));
+    }
+
+    @GetMapping("/refunds")
+    public ResponseEntity<List<OrderResponseDto>> getRefundQueue(
+            @RequestParam(required = false) Long branchId,
+            @AuthenticationPrincipal UserDetails userDetails) {
         User user = getAuthenticatedUser(userDetails);
-        if (user == null || user.getRole() != Role.BRANCH_MANAGER || user.getBranchId() == null) {
-            throw new OrderApiException(HttpStatus.FORBIDDEN, "MANAGER_REQUIRED",
-                    "An assigned branch manager is required to choose a rider");
+        return ResponseEntity.ok(orderService.getRefundQueueFor(branchFor(user, branchId), user));
+    }
+
+    @GetMapping("/cancel-requests")
+    public ResponseEntity<List<OrderResponseDto>> getCancelRequestQueue(
+            @RequestParam(required = false) Long branchId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        User user = getAuthenticatedUser(userDetails);
+        return ResponseEntity.ok(orderService.getCancelRequestQueueFor(branchFor(user, branchId), user));
+    }
+
+    @GetMapping("/complaints")
+    public ResponseEntity<List<ComplaintService.Complaint>> getBranchComplaints(
+            @RequestParam(required = false) Long branchId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        User user = getAuthenticatedUser(userDetails);
+        return ResponseEntity.ok(orderService.getComplaintsFor(branchFor(user, branchId), user));
+    }
+
+    @GetMapping("/reviews")
+    public ResponseEntity<List<ReviewService.Review>> getBranchReviews(
+            @RequestParam(required = false) Long branchId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        User user = getAuthenticatedUser(userDetails);
+        return ResponseEntity.ok(orderService.getReviewsFor(branchFor(user, branchId), user));
+    }
+
+    private Long branchFor(User user, Long requested) {
+        if (user == null) {
+            throw new OrderApiException(HttpStatus.UNAUTHORIZED, "AUTH_REQUIRED", "Authentication is required");
         }
-        accessGuard.requireUsableAccount(user);
-        return ResponseEntity.ok(userRepository.findByRoleAndBranchIdAndStatus(
-                Role.DELIVERY_PARTNER, user.getBranchId(), UserStatus.APPROVED).stream()
-                .map(UserDto::fromEntity).toList());
+        return requested != null ? requested : user.getBranchId();
     }
 
     @PutMapping("/{id}/status")
@@ -158,10 +193,97 @@ public class OrderController {
             @Valid @RequestBody OrderStatusUpdateRequestDto request,
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = getAuthenticatedUser(userDetails);
-        accessGuard.requireStaffAction(id, user);
+        accessGuard.requireDeliveryAction(id, user);
         OrderResponseDto updated = orderService.updateOrderStatus(id, request.getStatus(), user,
                 request.getRiderId(), request.getNote());
         return ResponseEntity.ok(updated);
+    }
+
+    @PostMapping("/{id}/accept")
+    public ResponseEntity<OrderResponseDto> acceptOrder(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(orderService.acceptOrderFor(id, getAuthenticatedUser(userDetails)));
+    }
+
+    @PostMapping("/{id}/reject")
+    public ResponseEntity<OrderResponseDto> rejectOrder(
+            @PathVariable Long id,
+            @Valid @RequestBody ReasonRequestDto request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(orderService.rejectOrderFor(id, getAuthenticatedUser(userDetails), request.reason()));
+    }
+
+    @PostMapping("/{id}/cancel-request")
+    public ResponseEntity<OrderResponseDto> requestCancellation(
+            @PathVariable Long id,
+            @Valid @RequestBody ReasonRequestDto request,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(orderService.requestCancellationFor(id, getAuthenticatedUser(userDetails),
+                guestToken, request.reason()));
+    }
+
+    @PostMapping("/{id}/cancel-request/approve")
+    public ResponseEntity<OrderResponseDto> approveCancellation(
+            @PathVariable Long id,
+            @Valid @RequestBody(required = false) DecisionNoteDto request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(orderService.resolveCancellationFor(id, getAuthenticatedUser(userDetails), true,
+                request != null ? request.note() : null));
+    }
+
+    @PostMapping("/{id}/cancel-request/decline")
+    public ResponseEntity<OrderResponseDto> declineCancellation(
+            @PathVariable Long id,
+            @Valid @RequestBody(required = false) DecisionNoteDto request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(orderService.resolveCancellationFor(id, getAuthenticatedUser(userDetails), false,
+                request != null ? request.note() : null));
+    }
+
+    @PostMapping("/{id}/refund/retry")
+    public ResponseEntity<OrderResponseDto> retryRefund(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(orderService.retryRefundFor(id, getAuthenticatedUser(userDetails)));
+    }
+
+    @GetMapping("/{id}/tracking")
+    public ResponseEntity<DeliveryService.Tracking> getTracking(
+            @PathVariable Long id,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        DeliveryService.Tracking tracking = orderService.getTrackingFor(id, getAuthenticatedUser(userDetails), guestToken);
+        return tracking == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(tracking);
+    }
+
+    @GetMapping("/{id}/feedback")
+    public ResponseEntity<FeedbackDto> getFeedback(
+            @PathVariable Long id,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(orderService.getFeedbackFor(id, getAuthenticatedUser(userDetails), guestToken));
+    }
+
+    @PostMapping("/{id}/review")
+    public ResponseEntity<ReviewService.Review> submitReview(
+            @PathVariable Long id,
+            @Valid @RequestBody ReviewRequestDto request,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(orderService.submitReviewFor(id,
+                getAuthenticatedUser(userDetails), guestToken, request.rating(), request.comment()));
+    }
+
+    @PostMapping("/{id}/complaints")
+    public ResponseEntity<ComplaintService.Complaint> fileComplaint(
+            @PathVariable Long id,
+            @Valid @RequestBody ComplaintRequestDto request,
+            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(orderService.fileComplaintFor(id,
+                getAuthenticatedUser(userDetails), guestToken, request.category(), request.description()));
     }
 
     @PostMapping("/{id}/cancel")
@@ -212,12 +334,19 @@ public class OrderController {
         accessGuard.requireCustomerAction(id, user, guestToken);
         OrderService.PaymentResult result = orderService.recordPaymentFor(id, request, idempotencyKey, user, guestToken);
         if (result.httpStatus() == 402) {
-            return ResponseEntity.status(402).body(Map.of(
-                    "error", result.order().getStatus() == OrderStatus.CANCELLED ? "PAYMENT_FAILED" : "PAYMENT_DECLINED",
-                    "message", result.order().getStatus() == OrderStatus.CANCELLED
-                            ? "Card payment declined three times; the order was cancelled"
-                            : "Card payment declined; try another card",
-                    "order", result.order()));
+            boolean cancelled = result.order().getStatus() == OrderStatus.CANCELLED;
+            int remaining = Math.max(0, orderService.getMaxCardAttempts() - result.order().getPaymentAttempts());
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("status", 402);
+            body.put("error", cancelled ? "PAYMENT_FAILED" : "PAYMENT_DECLINED");
+            body.put("declineCode", result.declineCode());
+            body.put("message", cancelled
+                    ? "Card declined " + orderService.getMaxCardAttempts() + " times; the order was cancelled"
+                    : (result.declineMessage() != null ? result.declineMessage() : "Card payment declined")
+                    + ". " + remaining + " attempt(s) left.");
+            body.put("attemptsRemaining", remaining);
+            body.put("order", result.order());
+            return ResponseEntity.status(402).body(body);
         }
         return ResponseEntity.status(result.httpStatus()).body(result.order());
     }
@@ -237,7 +366,7 @@ public class OrderController {
             @Valid @RequestBody CodCollectRequestDto request,
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = getAuthenticatedUser(userDetails);
-        accessGuard.requireStaffAction(id, user);
+        accessGuard.requireDeliveryAction(id, user);
         return ResponseEntity.ok(orderService.collectCod(id, request.cashCollected(), user));
     }
 
@@ -247,12 +376,12 @@ public class OrderController {
             @Valid @RequestBody DeliveryFailedRequestDto request,
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = getAuthenticatedUser(userDetails);
-        accessGuard.requireStaffAction(id, user);
+        accessGuard.requireDeliveryAction(id, user);
         return ResponseEntity.ok(orderService.markDeliveryFailed(id, request.reason(), user));
     }
 
     @GetMapping("/{id}/history")
-    public ResponseEntity<List<OrderStatusHistory>> getStatusHistory(
+    public ResponseEntity<List<OrderStatusHistoryDto>> getStatusHistory(
             @PathVariable Long id,
             @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -260,19 +389,8 @@ public class OrderController {
         return ResponseEntity.ok(orderService.getHistoryFor(id, getAuthenticatedUser(userDetails), guestToken));
     }
 
-    @PostMapping("/{id}/payment-intent")
-    public ResponseEntity<PaymentIntentResponseDto> createPaymentIntent(
-            @PathVariable Long id,
-            @RequestHeader(name = "X-Guest-Token", required = false) String guestToken,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        User user = getAuthenticatedUser(userDetails);
-        accessGuard.requireCustomerAction(id, user, guestToken);
-        PaymentIntentResponseDto response = orderService.createPaymentIntentFor(id, user, guestToken);
-        return ResponseEntity.ok(response);
-    }
-
     @GetMapping("/addresses")
-    public ResponseEntity<List<SavedAddress>> getSavedAddresses(
+    public ResponseEntity<List<SavedAddressDto>> getSavedAddresses(
             @RequestParam(required = false) Long customerId,
             @AuthenticationPrincipal UserDetails userDetails) {
         User user = getAuthenticatedUser(userDetails);
@@ -282,7 +400,7 @@ public class OrderController {
     }
 
     @PostMapping("/addresses")
-    public ResponseEntity<SavedAddress> saveAddress(
+    public ResponseEntity<SavedAddressDto> saveAddress(
             @RequestParam(required = false) Long customerId,
             @RequestParam String addressLine,
             @RequestParam(required = false) String city,
@@ -306,58 +424,5 @@ public class OrderController {
         accessGuard.requireGuestToken(orderId, guestToken);
         ClaimOrdersResponseDto response = orderService.claimGuestOrderFor(orderId, user.getId(), guestToken);
         return ResponseEntity.ok(response);
-    }
-
-    @ExceptionHandler(OrderApiException.class)
-    public ResponseEntity<Map<String, Object>> handleOrderApiException(OrderApiException ex) {
-        return ResponseEntity.status(ex.getStatus()).body(Map.of(
-                "error", ex.getCode(), "message", ex.getMessage()));
-    }
-
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
-                "timestamp", LocalDateTime.now(),
-                "status", HttpStatus.BAD_REQUEST.value(),
-                "error", "VALIDATION_ERROR",
-                "message", ex.getMessage()
-        ));
-    }
-
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleInvalidBody(MethodArgumentNotValidException ex) {
-        String message = ex.getBindingResult().getFieldErrors().stream()
-                .findFirst().map(error -> error.getDefaultMessage()).orElse("Invalid request body");
-        return ResponseEntity.badRequest().body(Map.of("error", "VALIDATION_ERROR", "message", message));
-    }
-
-    @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<Map<String, Object>> handleIllegalState(IllegalStateException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
-                "timestamp", LocalDateTime.now(),
-                "status", HttpStatus.BAD_REQUEST.value(),
-                "error", "INVALID_OPERATION",
-                "message", ex.getMessage()
-        ));
-    }
-
-    @ExceptionHandler({ObjectOptimisticLockingFailureException.class, OptimisticLockException.class})
-    public ResponseEntity<Map<String, Object>> handleOptimisticLock(Exception ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
-                "timestamp", LocalDateTime.now(),
-                "status", HttpStatus.CONFLICT.value(),
-                "error", "CONCURRENT_UPDATE",
-                "message", "This order was just updated by another user or session. Please refresh to see the latest status."
-        ));
-    }
-
-    @ExceptionHandler(OrderRateLimitExceededException.class)
-    public ResponseEntity<Map<String, Object>> handleRateLimitExceeded(OrderRateLimitExceededException ex) {
-        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of(
-                "timestamp", LocalDateTime.now(),
-                "status", HttpStatus.TOO_MANY_REQUESTS.value(),
-                "error", "RATE_LIMITED",
-                "message", ex.getMessage()
-        ));
     }
 }

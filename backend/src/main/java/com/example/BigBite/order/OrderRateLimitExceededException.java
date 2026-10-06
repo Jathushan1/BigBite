@@ -1,7 +1,10 @@
 package com.example.BigBite.order;
 
-public class OrderRateLimitExceededException extends RuntimeException {
+import com.example.BigBite.common.exception.ApiException;
+import org.springframework.http.HttpStatus;
+
+public class OrderRateLimitExceededException extends ApiException {
     public OrderRateLimitExceededException(String message) {
-        super(message);
+        super(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", message);
     }
 }

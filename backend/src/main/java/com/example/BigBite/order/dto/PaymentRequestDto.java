@@ -3,46 +3,37 @@ package com.example.BigBite.order.dto;
 import com.example.BigBite.order.PaymentMethod;
 import com.fasterxml.jackson.annotation.JsonAlias;
 
+/**
+ * Payment choice for an order. Card payments carry the card itself; whether the charge succeeds is decided
+ * by the gateway on the server, never by the client.
+ */
 public class PaymentRequestDto {
 
     @JsonAlias("method")
-    private PaymentMethod paymentMethod = PaymentMethod.CARD_STRIPE;
-    private String stripePaymentIntentId;
-    private boolean success = true;
+    private PaymentMethod paymentMethod = PaymentMethod.CREDIT_CARD;
+    private CardDto card;
 
     public PaymentRequestDto() {
     }
 
-    public PaymentRequestDto(boolean success) {
-        this.success = success;
-    }
-
-    public PaymentRequestDto(PaymentMethod paymentMethod, boolean success) {
+    public PaymentRequestDto(PaymentMethod paymentMethod, CardDto card) {
         this.paymentMethod = paymentMethod;
-        this.success = success;
+        this.card = card;
     }
 
-    public PaymentMethod getPaymentMethod() {
-        return paymentMethod;
+    public static PaymentRequestDto cod() {
+        return new PaymentRequestDto(PaymentMethod.CASH_ON_DELIVERY, null);
     }
 
-    public void setPaymentMethod(PaymentMethod paymentMethod) {
-        this.paymentMethod = paymentMethod;
-    }
+    public PaymentMethod getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(PaymentMethod paymentMethod) { this.paymentMethod = paymentMethod; }
+    public CardDto getCard() { return card; }
+    public void setCard(CardDto card) { this.card = card; }
 
-    public String getStripePaymentIntentId() {
-        return stripePaymentIntentId;
-    }
-
-    public void setStripePaymentIntentId(String stripePaymentIntentId) {
-        this.stripePaymentIntentId = stripePaymentIntentId;
-    }
-
-    public boolean isSuccess() {
-        return success;
-    }
-
-    public void setSuccess(boolean success) {
-        this.success = success;
+    public record CardDto(String holderName, String number, Integer expMonth, Integer expYear, String cvc) {
+        @Override
+        public String toString() {
+            return "CardDto[redacted]";
+        }
     }
 }

@@ -1,5 +1,7 @@
 package com.example.BigBite.order;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -26,6 +28,7 @@ public class PaymentAttempt {
     private String idempotencyKey;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 32)
     private PaymentMethod method;
 
@@ -36,10 +39,12 @@ public class PaymentAttempt {
     private int httpStatus;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "payment_status", nullable = false, length = 32)
     private PaymentStatus paymentStatus;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "order_status", nullable = false, length = 32)
     private OrderStatus orderStatus;
 

@@ -1,26 +1,35 @@
 package com.example.BigBite.order;
 
-import com.example.BigBite.order.dto.BillDto;
-import com.example.BigBite.order.dto.BillItemDto;
-import com.example.BigBite.order.dto.ClaimOrdersResponseDto;
-import com.example.BigBite.order.dto.OrderItemRequestDto;
-import com.example.BigBite.order.dto.OrderItemResponseDto;
-import com.example.BigBite.order.dto.OrderRequestDto;
-import com.example.BigBite.order.dto.OrderResponseDto;
-import com.example.BigBite.order.dto.PaymentRequestDto;
-import com.example.BigBite.order.dto.PaymentOptionsDto;
-import com.example.BigBite.order.external.BranchLookupService;
-import com.example.BigBite.order.external.InventoryService;
-import com.example.BigBite.order.external.InventoryService.OrderLine;
-import com.example.BigBite.order.external.MenuLookupService;
-import com.example.BigBite.order.external.PromotionService;
-import com.example.BigBite.order.external.PaymentGateway;
-import com.example.BigBite.order.external.RefundGateway;
 import com.example.BigBite.auth.Role;
 import com.example.BigBite.auth.User;
 import com.example.BigBite.auth.UserRepository;
 import com.example.BigBite.auth.UserStatus;
+import com.example.BigBite.order.dto.BillDto;
+import com.example.BigBite.order.dto.BillItemDto;
+import com.example.BigBite.order.dto.ClaimOrdersResponseDto;
+import com.example.BigBite.order.dto.FeedbackDto;
+import com.example.BigBite.order.dto.OrderItemRequestDto;
+import com.example.BigBite.order.dto.OrderItemResponseDto;
+import com.example.BigBite.order.dto.OrderRequestDto;
+import com.example.BigBite.order.dto.OrderResponseDto;
+import com.example.BigBite.order.dto.OrderStatusHistoryDto;
+import com.example.BigBite.order.dto.PaymentOptionsDto;
+import com.example.BigBite.order.dto.PaymentRequestDto;
+import com.example.BigBite.order.dto.SavedAddressDto;
 import com.example.BigBite.order.event.OrderEvents;
+import com.example.BigBite.order.external.BranchLookupService;
+import com.example.BigBite.order.external.CardValidator;
+import com.example.BigBite.order.external.ComplaintService;
+import com.example.BigBite.order.external.DeliveryService;
+import com.example.BigBite.order.external.InventoryService;
+import com.example.BigBite.order.external.InventoryService.OrderLine;
+import com.example.BigBite.order.external.MenuLookupService;
+import com.example.BigBite.order.external.PaymentGateway;
+import com.example.BigBite.order.external.PromotionService;
+import com.example.BigBite.order.external.RefundGateway;
+import com.example.BigBite.order.external.ReviewService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
@@ -34,8 +43,12 @@ import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -45,23 +58,36 @@ import java.util.UUID;
 @Transactional
 public class OrderService {
 
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
+
     @Value("${bigbite.order.tax-rate:0.05}")
     private BigDecimal taxRate = new BigDecimal("0.05");
     @Value("${bigbite.order.delivery-fee:300.00}")
     private BigDecimal flatDeliveryFee = new BigDecimal("300.00");
     @Value("${bigbite.order.payment-timeout-minutes:15}")
     private int paymentTimeoutMinutes = 15;
+    @Value("${bigbite.order.acceptance-timeout-minutes:10}")
+    private int acceptanceTimeoutMinutes = 10;
     @Value("${bigbite.order.max-card-attempts:3}")
     private int maxCardAttempts = 3;
+    @Value("${bigbite.order.max-refund-attempts:5}")
+    private int maxRefundAttempts = 5;
     @Value("${bigbite.order.min-subtotal:500.00}")
     private BigDecimal minimumOrderSubtotal = new BigDecimal("500.00");
+    @Value("${bigbite.order.complaint-window-hours:48}")
+    private int complaintWindowHours = 48;
     public static final int MAX_DISTINCT_ITEMS = 20;
     public static final int MAX_ITEM_QUANTITY = 50;
-    private static final Set<OrderStatus> CANCELLABLE_STATUSES = Set.of(
-            OrderStatus.PLACED,
-            OrderStatus.PAYMENT_VERIFIED,
-            OrderStatus.CONFIRMED
-    );
+
+    /** Statuses a customer (or guest) can cancel straight away, before the branch accepts. */
+    private static final Set<OrderStatus> CUSTOMER_CANCELLABLE = Set.of(OrderStatus.PLACED, OrderStatus.PAYMENT_VERIFIED);
+    /** After acceptance the customer must ask; staff decide. */
+    private static final Set<OrderStatus> CANCEL_REQUESTABLE = Set.of(OrderStatus.CONFIRMED, OrderStatus.PREPARING);
+    /** Statuses branch staff or the admin can still cancel (food has not left the branch). */
+    private static final Set<OrderStatus> STAFF_CANCELLABLE = Set.of(OrderStatus.PLACED, OrderStatus.PAYMENT_VERIFIED,
+            OrderStatus.CONFIRMED, OrderStatus.PREPARING, OrderStatus.READY_FOR_PICKUP);
+    private static final Set<OrderStatus> COMPLAINABLE = Set.of(OrderStatus.DELIVERED, OrderStatus.COMPLETED,
+            OrderStatus.DELIVERY_FAILED);
 
     public static final String SRI_LANKAN_PHONE_REGEX = "^(?:\\+94|0)[1-9][0-9]{8}$";
 
@@ -81,6 +107,9 @@ public class OrderService {
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final OrderAccessGuard accessGuard;
+    private final DeliveryService deliveryService;
+    private final ReviewService reviewService;
+    private final ComplaintService complaintService;
     private final ObjectMapper json = new ObjectMapper();
 
     public OrderService(OrderRepository orderRepository,
@@ -98,7 +127,10 @@ public class OrderService {
                         OrderTransitionGuard transitionGuard,
                         UserRepository userRepository,
                         ApplicationEventPublisher eventPublisher,
-                        OrderAccessGuard accessGuard) {
+                        OrderAccessGuard accessGuard,
+                        DeliveryService deliveryService,
+                        ReviewService reviewService,
+                        ComplaintService complaintService) {
         this.orderRepository = orderRepository;
         this.branchLookupService = branchLookupService;
         this.menuLookupService = menuLookupService;
@@ -115,7 +147,12 @@ public class OrderService {
         this.userRepository = userRepository;
         this.eventPublisher = eventPublisher;
         this.accessGuard = accessGuard;
+        this.deliveryService = deliveryService;
+        this.reviewService = reviewService;
+        this.complaintService = complaintService;
     }
+
+    // ------------------------------------------------------------------ access-checked entry points
 
     public OrderResponseDto getOrderFor(Long id, User actor, String guestToken) {
         accessGuard.requireView(id, actor, guestToken);
@@ -136,19 +173,14 @@ public class OrderService {
         return getOrderBill(id);
     }
 
-    public List<OrderStatusHistory> getHistoryFor(Long id, User actor, String guestToken) {
+    public List<OrderStatusHistoryDto> getHistoryFor(Long id, User actor, String guestToken) {
         accessGuard.requireView(id, actor, guestToken);
-        return getStatusHistory(id);
+        return getStatusHistory(id).stream().map(OrderStatusHistoryDto::fromEntity).toList();
     }
 
     public PaymentOptionsDto getPaymentOptionsFor(Long id, User actor, String guestToken) {
         accessGuard.requireCustomerAction(id, actor, guestToken);
         return getPaymentOptions(id);
-    }
-
-    public com.example.BigBite.order.dto.PaymentIntentResponseDto createPaymentIntentFor(Long id, User actor, String guestToken) {
-        accessGuard.requireCustomerAction(id, actor, guestToken);
-        return createPaymentIntent(id);
     }
 
     public List<OrderResponseDto> getOrdersFor(Long customerId, Long branchId, OrderStatus status, User actor) {
@@ -180,15 +212,124 @@ public class OrderService {
         return claimGuestOrder(orderId, customerId);
     }
 
-    public List<SavedAddress> getSavedAddressesFor(Long customerId, User actor) {
+    public List<SavedAddressDto> getSavedAddressesFor(Long customerId, User actor) {
         accessGuard.requireAddressOwner(actor, customerId);
-        return getSavedAddresses(customerId);
+        return getSavedAddresses(customerId).stream().map(SavedAddressDto::fromEntity).toList();
     }
 
-    public SavedAddress saveAddressFor(Long customerId, String addressLine, String city, User actor) {
+    public SavedAddressDto saveAddressFor(Long customerId, String addressLine, String city, User actor) {
         accessGuard.requireAddressOwner(actor, customerId);
-        return saveAddress(customerId, addressLine, city);
+        return SavedAddressDto.fromEntity(saveAddress(customerId, addressLine, city));
     }
+
+    public OrderResponseDto acceptOrderFor(Long id, User actor) {
+        accessGuard.requireStaffAction(id, actor);
+        return updateOrderStatus(id, OrderStatus.CONFIRMED, actor, null, "Accepted by branch");
+    }
+
+    public OrderResponseDto rejectOrderFor(Long id, User actor, String reason) {
+        accessGuard.requireStaffAction(id, actor);
+        return rejectOrder(id, actor, reason);
+    }
+
+    public OrderResponseDto requestCancellationFor(Long id, User actor, String guestToken, String reason) {
+        accessGuard.requireCustomerAction(id, actor, guestToken);
+        return requestCancellation(id, actor, reason);
+    }
+
+    public OrderResponseDto resolveCancellationFor(Long id, User actor, boolean approve, String note) {
+        accessGuard.requireStaffAction(id, actor);
+        return resolveCancellation(id, actor, approve, note);
+    }
+
+    public OrderResponseDto retryRefundFor(Long id, User actor) {
+        accessGuard.requireStaffAction(id, actor);
+        return retryRefund(id, actor);
+    }
+
+    public DeliveryService.Tracking getTrackingFor(Long id, User actor, String guestToken) {
+        accessGuard.requireView(id, actor, guestToken);
+        return deliveryService.track(id);
+    }
+
+    public List<DeliveryService.RiderAvailability> getRidersFor(User actor) {
+        accessGuard.requireUsableAccount(actor);
+        if (actor == null || actor.getRole() != Role.STAFF || actor.getBranchId() == null) {
+            throw new OrderApiException(HttpStatus.FORBIDDEN, "STAFF_REQUIRED",
+                    "Assigned branch staff are required to choose a rider");
+        }
+        return deliveryService.ridersFor(actor.getBranchId());
+    }
+
+    public List<OrderResponseDto> getRefundQueueFor(Long branchId, User actor) {
+        accessGuard.requireBranchQueue(actor, branchId);
+        return orderRepository.findByBranchIdAndRefundStatusOrderByCreatedAtDesc(branchId, RefundStatus.PENDING)
+                .stream().map(this::toOrderResponseDto).toList();
+    }
+
+    public List<OrderResponseDto> getCancelRequestQueueFor(Long branchId, User actor) {
+        accessGuard.requireBranchQueue(actor, branchId);
+        return orderRepository.findByBranchIdAndCancelRequestStatusOrderByCreatedAtDesc(branchId, CancelRequestStatus.PENDING)
+                .stream().map(this::toOrderResponseDto).toList();
+    }
+
+    public List<ComplaintService.Complaint> getComplaintsFor(Long branchId, User actor) {
+        accessGuard.requireBranchQueue(actor, branchId);
+        return complaintService.listForBranch(branchId);
+    }
+
+    public List<ReviewService.Review> getReviewsFor(Long branchId, User actor) {
+        accessGuard.requireBranchQueue(actor, branchId);
+        return reviewService.listForBranch(branchId);
+    }
+
+    public FeedbackDto getFeedbackFor(Long id, User actor, String guestToken) {
+        Order order = accessGuard.requireView(id, actor, guestToken);
+        boolean owner = isOwnerOrGuest(order, actor, guestToken);
+        Optional<ReviewService.Review> review = reviewService.findByOrder(id);
+        return new FeedbackDto(review.orElse(null), complaintService.listForOrder(id),
+                owner && review.isEmpty() && order.getStatus() == OrderStatus.COMPLETED,
+                owner && complaintWindowOpen(order));
+    }
+
+    public ReviewService.Review submitReviewFor(Long id, User actor, String guestToken, int rating, String comment) {
+        Order order = accessGuard.requireCustomerAction(id, actor, guestToken);
+        if (order.getStatus() != OrderStatus.COMPLETED) {
+            throw new OrderApiException(HttpStatus.CONFLICT, "REVIEW_NOT_ALLOWED", "You can review an order once it is completed");
+        }
+        if (reviewService.findByOrder(id).isPresent()) {
+            throw new OrderApiException(HttpStatus.CONFLICT, "ALREADY_REVIEWED", "This order has already been reviewed");
+        }
+        String trimmed = comment == null ? null : comment.trim();
+        return reviewService.submit(id, order.getBranchId(), order.getCustomerId(), order.getContactName(), rating, trimmed);
+    }
+
+    public ComplaintService.Complaint fileComplaintFor(Long id, User actor, String guestToken, String category, String description) {
+        Order order = accessGuard.requireCustomerAction(id, actor, guestToken);
+        String normalized = category == null ? "" : category.trim().toUpperCase();
+        if (!ComplaintService.CATEGORIES.contains(normalized)) {
+            throw new OrderApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_CATEGORY", "Choose a valid complaint category");
+        }
+        if (!complaintWindowOpen(order)) {
+            throw new OrderApiException(HttpStatus.CONFLICT, "COMPLAINT_NOT_ALLOWED",
+                    "Complaints can be raised within " + complaintWindowHours + " hours of delivery or collection");
+        }
+        return complaintService.file(id, order.getBranchId(), order.getCustomerId(), order.getContactName(),
+                normalized, description.trim());
+    }
+
+    private boolean complaintWindowOpen(Order order) {
+        if (!COMPLAINABLE.contains(order.getStatus())) return false;
+        LocalDateTime reference = order.getDeliveredAt() != null ? order.getDeliveredAt() : order.getUpdatedAt();
+        return reference == null || Duration.between(reference, LocalDateTime.now()).toHours() < complaintWindowHours;
+    }
+
+    private boolean isOwnerOrGuest(Order order, User actor, String guestToken) {
+        if (actor != null && actor.getRole() == Role.CUSTOMER && actor.getId().equals(order.getCustomerId())) return true;
+        return guestTokenService.matches(order, guestToken);
+    }
+
+    // ------------------------------------------------------------------ placement
 
     OrderResponseDto placeOrder(OrderRequestDto request) {
         return placeOrder(request, null);
@@ -430,8 +571,11 @@ public class OrderService {
             orders = orderRepository.findAllByOrderByCreatedAtDesc();
         }
 
-        return orders.stream().map(this::toOrderResponseDto).toList();
+        Map<Long, User> riders = new HashMap<>();
+        return orders.stream().map(order -> toOrderResponseDto(order, riders)).toList();
     }
+
+    // ------------------------------------------------------------------ staff pipeline
 
     public OrderResponseDto updateOrderStatus(Long id, OrderStatus newStatus, User actor, Long riderId, String note) {
         if (newStatus == null) {
@@ -441,7 +585,12 @@ public class OrderService {
             throw new OrderApiException(HttpStatus.BAD_REQUEST, "NOTE_TOO_LONG", "Status note is too long");
         }
         Order order = findOrderOrThrow(id);
+        boolean accepting = order.isAwaitingAcceptance();
         transitionGuard.checkStaff(order, newStatus, actor);
+        if (accepting) {
+            order.setAcceptedAt(LocalDateTime.now());
+            order.setAcceptedBy(actor.getId());
+        }
         if (newStatus == OrderStatus.OUT_FOR_DELIVERY) {
             if (riderId == null) {
                 throw new OrderApiException(HttpStatus.BAD_REQUEST, "RIDER_REQUIRED", "Choose a rider before dispatch");
@@ -459,7 +608,11 @@ public class OrderService {
         if (newStatus == OrderStatus.DELIVERED) {
             order.setDeliveredAt(LocalDateTime.now());
         }
-        return transition(order, newStatus, actor.getId(), actor.getRole().name(), note);
+        OrderResponseDto result = transition(order, newStatus, actor.getId(), actor.getRole().name(), note);
+        if (accepting) {
+            eventPublisher.publishEvent(new OrderEvents.Accepted(order.getId(), order.getBranchId(), actor.getId()));
+        }
+        return result;
     }
 
     private OrderResponseDto transition(Order order, OrderStatus target, Long actorId, String actorRole, String note) {
@@ -469,6 +622,8 @@ public class OrderService {
         historyRepository.save(new OrderStatusHistory(saved.getId(), previous, target, actorId, actorRole, note));
         switch (target) {
             case PREPARING -> eventPublisher.publishEvent(new OrderEvents.PreparingStarted(saved.getId()));
+            case OUT_FOR_DELIVERY -> eventPublisher.publishEvent(new OrderEvents.Dispatched(saved.getId(), saved.getRiderId()));
+            case DELIVERED -> eventPublisher.publishEvent(new OrderEvents.Delivered(saved.getId()));
             case CANCELLED -> eventPublisher.publishEvent(new OrderEvents.Cancelled(saved.getId(), saved.getCancellationReason()));
             case DELIVERY_FAILED -> eventPublisher.publishEvent(new OrderEvents.DeliveryFailed(saved.getId(), saved.getFailureReason()));
             case COMPLETED -> eventPublisher.publishEvent(new OrderEvents.Completed(saved.getId()));
@@ -477,37 +632,144 @@ public class OrderService {
         return toOrderResponseDto(saved);
     }
 
+    /** Customer/guest, branch staff or the admin cancel. Customers may only cancel before the branch accepts. */
     OrderResponseDto cancelOrder(Long id, User actor, String reason) {
         if (reason != null && reason.length() > 255) {
             throw new OrderApiException(HttpStatus.BAD_REQUEST, "REASON_TOO_LONG", "Cancellation reason is too long");
         }
         Order order = findOrderOrThrow(id);
-        if (!CANCELLABLE_STATUSES.contains(order.getStatus())) {
+        Role role = actor == null ? null : actor.getRole();
+        boolean branchSide = role == Role.STAFF || role == Role.SUPER_ADMIN;
+        if (role == Role.DELIVERY_PARTNER || role == Role.BRANCH_MANAGER) {
+            throw new OrderApiException(HttpStatus.FORBIDDEN, "CANCELLATION_FORBIDDEN",
+                    "Only the customer, branch staff or the admin can cancel orders");
+        }
+        if (!branchSide && CANCEL_REQUESTABLE.contains(order.getStatus())) {
+            throw new OrderApiException(HttpStatus.CONFLICT, "CANCEL_REQUEST_REQUIRED",
+                    "The branch has already accepted this order. Send a cancellation request instead.");
+        }
+        Set<OrderStatus> allowed = branchSide ? STAFF_CANCELLABLE : CUSTOMER_CANCELLABLE;
+        if (!allowed.contains(order.getStatus())) {
             throw new OrderApiException(HttpStatus.CONFLICT, "CANCELLATION_LOCKED",
                     "Order can no longer be cancelled");
         }
-        String cancelReason = actor == null ? "CUSTOMER" : switch (actor.getRole()) {
-            case CUSTOMER -> "CUSTOMER";
-            case BRANCH_MANAGER -> "BRANCH";
-            case SUPER_ADMIN -> "ADMIN";
-            case DELIVERY_PARTNER -> throw new OrderApiException(HttpStatus.FORBIDDEN,
-                    "CANCELLATION_FORBIDDEN", "Riders cannot cancel orders");
-        };
+        String cancelReason = role == null || role == Role.CUSTOMER ? "CUSTOMER"
+                : role == Role.STAFF ? "BRANCH" : "ADMIN";
+        return cancelWithRefund(order, cancelReason, actor, reason);
+    }
+
+    OrderResponseDto rejectOrder(Long id, User actor, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new OrderApiException(HttpStatus.BAD_REQUEST, "REASON_REQUIRED", "Tell the customer why the order was rejected");
+        }
+        Order order = findOrderOrThrow(id);
+        transitionGuard.checkStaffActor(order, actor);
+        if (!order.isAwaitingAcceptance()) {
+            throw new OrderApiException(HttpStatus.CONFLICT, "NOT_AWAITING_ACCEPTANCE",
+                    "Only orders waiting for acceptance can be rejected");
+        }
+        return cancelWithRefund(order, "REJECTED_BY_BRANCH", actor, "Rejected: " + reason.trim());
+    }
+
+    OrderResponseDto requestCancellation(Long id, User actor, String reason) {
+        if (reason == null || reason.isBlank() || reason.length() > 255) {
+            throw new OrderApiException(HttpStatus.BAD_REQUEST, "REASON_REQUIRED", "Give a short reason for cancelling");
+        }
+        Order order = findOrderOrThrow(id);
+        if (!CANCEL_REQUESTABLE.contains(order.getStatus())) {
+            throw new OrderApiException(HttpStatus.CONFLICT, "CANCEL_REQUEST_NOT_ALLOWED",
+                    CUSTOMER_CANCELLABLE.contains(order.getStatus())
+                            ? "This order can be cancelled directly"
+                            : "This order can no longer be cancelled");
+        }
+        if (order.getCancelRequestStatus() != null) {
+            throw new OrderApiException(HttpStatus.CONFLICT, "CANCEL_REQUEST_EXISTS",
+                    order.getCancelRequestStatus() == CancelRequestStatus.PENDING
+                            ? "A cancellation request is already waiting for the branch"
+                            : "A cancellation request for this order was already decided");
+        }
+        order.setCancelRequestStatus(CancelRequestStatus.PENDING);
+        order.setCancelRequestReason(reason.trim());
+        order.setCancelRequestedAt(LocalDateTime.now());
+        Order saved = orderRepository.save(order);
+        historyRepository.save(new OrderStatusHistory(saved.getId(), saved.getStatus(), saved.getStatus(),
+                actor != null ? actor.getId() : null, actor != null ? actor.getRole().name() : "GUEST",
+                "Cancellation requested: " + reason.trim()));
+        eventPublisher.publishEvent(new OrderEvents.CancelRequested(saved.getId(), saved.getBranchId(), reason.trim()));
+        return toOrderResponseDto(saved);
+    }
+
+    OrderResponseDto resolveCancellation(Long id, User actor, boolean approve, String note) {
+        Order order = findOrderOrThrow(id);
+        transitionGuard.checkStaffActor(order, actor);
+        if (order.getCancelRequestStatus() != CancelRequestStatus.PENDING) {
+            throw new OrderApiException(HttpStatus.CONFLICT, "NO_PENDING_CANCEL_REQUEST",
+                    "There is no pending cancellation request for this order");
+        }
+        String trimmedNote = note == null || note.isBlank() ? null : note.trim();
+        order.setCancelRequestNote(trimmedNote);
+        if (approve) {
+            order.setCancelRequestStatus(CancelRequestStatus.APPROVED);
+            return cancelWithRefund(order, "CUSTOMER_REQUEST", actor,
+                    "Cancellation request approved" + (trimmedNote != null ? ": " + trimmedNote : ""));
+        }
+        order.setCancelRequestStatus(CancelRequestStatus.DECLINED);
+        Order saved = orderRepository.save(order);
+        historyRepository.save(new OrderStatusHistory(saved.getId(), saved.getStatus(), saved.getStatus(),
+                actor.getId(), actor.getRole().name(),
+                "Cancellation request declined" + (trimmedNote != null ? ": " + trimmedNote : "")));
+        return toOrderResponseDto(saved);
+    }
+
+    private OrderResponseDto cancelWithRefund(Order order, String cancelReason, User actor, String note) {
         order.setCancellationReason(cancelReason);
         if (order.getPaymentStatus() == PaymentStatus.VERIFIED) {
             order.setPaymentStatus(PaymentStatus.REFUND_PENDING);
             order.setRefundStatus(RefundStatus.PENDING);
-            RefundGateway.RefundResult refund = refundGateway.refund(order.getPaymentReference(), order.getGrandTotal());
-            if (refund.refunded()) {
-                order.setPaymentStatus(PaymentStatus.REFUNDED);
-                order.setRefundStatus(RefundStatus.PROCESSED);
-                order.setRefundedAmount(order.getGrandTotal());
-            }
+            attemptRefund(order);
         } else {
             order.setPaymentStatus(PaymentStatus.VOIDED);
         }
         return transition(order, OrderStatus.CANCELLED, actor != null ? actor.getId() : null,
-                actor != null ? actor.getRole().name() : "GUEST", reason);
+                actor != null ? actor.getRole().name() : (cancelReason.equals("CUSTOMER") ? "GUEST" : "SYSTEM"), note);
+    }
+
+    /** One refund call to the gateway; leaves the order REFUND_PENDING when the gateway fails. */
+    private boolean attemptRefund(Order order) {
+        order.setRefundAttempts(order.getRefundAttempts() + 1);
+        order.setLastRefundAttemptAt(LocalDateTime.now());
+        RefundGateway.RefundResult refund;
+        try {
+            refund = refundGateway.refund(order.getPaymentReference(), order.getGrandTotal());
+        } catch (RuntimeException ex) {
+            log.warn("Refund gateway error for order {}: {}", order.getId(), ex.getMessage());
+            return false;
+        }
+        if (refund != null && refund.refunded()) {
+            order.setPaymentStatus(PaymentStatus.REFUNDED);
+            order.setRefundStatus(RefundStatus.PROCESSED);
+            order.setRefundedAmount(order.getGrandTotal());
+            order.setRefundReference(refund.reference());
+            return true;
+        }
+        return false;
+    }
+
+    OrderResponseDto retryRefund(Long id, User actor) {
+        Order order = findOrderOrThrow(id);
+        if (order.getRefundStatus() != RefundStatus.PENDING) {
+            throw new OrderApiException(HttpStatus.CONFLICT, "NO_PENDING_REFUND", "This order has no pending refund");
+        }
+        boolean refunded = attemptRefund(order);
+        Order saved = orderRepository.save(order);
+        historyRepository.save(new OrderStatusHistory(saved.getId(), saved.getStatus(), saved.getStatus(),
+                actor != null ? actor.getId() : null, actor != null ? actor.getRole().name() : "SYSTEM",
+                refunded ? "Refund processed" : "Refund attempt failed"));
+        if (!refunded) {
+            throw new OrderApiException(HttpStatus.BAD_GATEWAY, "REFUND_FAILED",
+                    "The payment provider did not accept the refund. Try again shortly.");
+        }
+        return toOrderResponseDto(saved);
     }
 
     OrderResponseDto updateOrderItem(Long orderId, Long itemId, Integer newQuantity) {
@@ -591,7 +853,7 @@ public class OrderService {
         BillDto bill = new BillDto();
         bill.setOrderId(order.getId());
         bill.setCustomerId(order.getCustomerId());
-        bill.setCustomerOrGuestName(order.getCustomerId() != null ? "Customer #" + order.getCustomerId() : order.getGuestName());
+        bill.setCustomerOrGuestName(order.getContactName() != null ? order.getContactName() : order.getGuestName());
         bill.setBranchId(order.getBranchId());
         bill.setFulfillmentType(order.getFulfillmentType());
         bill.setDeliveryAddress(order.getDeliveryAddress());
@@ -627,15 +889,17 @@ public class OrderService {
         return bill;
     }
 
-    OrderResponseDto recordPayment(Long id, boolean success) {
-        return recordPayment(id, new PaymentRequestDto(PaymentMethod.CARD_STRIPE, success));
-    }
+    // ------------------------------------------------------------------ payment
 
     OrderResponseDto recordPayment(Long id, PaymentRequestDto request) {
         return recordPayment(id, request, UUID.randomUUID().toString()).order();
     }
 
-    public record PaymentResult(int httpStatus, OrderResponseDto order) {}
+    public record PaymentResult(int httpStatus, OrderResponseDto order, String declineCode, String declineMessage) {
+        public PaymentResult(int httpStatus, OrderResponseDto order) {
+            this(httpStatus, order, null, null);
+        }
+    }
 
     PaymentResult recordPayment(Long id, PaymentRequestDto request, String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100) {
@@ -646,9 +910,13 @@ public class OrderService {
                 .orElseThrow(() -> new OrderApiException(HttpStatus.NOT_FOUND,
                         "ORDER_NOT_FOUND", "Order with id " + id + " not found"));
         PaymentMethod method = request != null && request.getPaymentMethod() != null
-                ? request.getPaymentMethod() : PaymentMethod.CARD_STRIPE;
+                ? request.getPaymentMethod() : PaymentMethod.CREDIT_CARD;
+        if (method == PaymentMethod.CARD_STRIPE) {
+            method = PaymentMethod.CREDIT_CARD;
+        }
         String key = idempotencyKey.trim();
-        String fingerprint = paymentFingerprint(id, method, request != null && request.isSuccess(), order.getGrandTotal());
+        PaymentGateway.CardDetails card = method == PaymentMethod.CASH_ON_DELIVERY ? null : toCard(request);
+        String fingerprint = paymentFingerprint(id, method, card, order.getGrandTotal());
         Optional<PaymentAttempt> duplicate = paymentAttemptRepository.findByIdempotencyKey(key);
         if (duplicate.isPresent()) {
             PaymentAttempt attempt = duplicate.get();
@@ -671,22 +939,31 @@ public class OrderService {
             order.setPaymentMethod(method);
             order.setPaymentStatus(PaymentStatus.PENDING);
             order.setPaymentIdempotencyKey(key);
-            OrderResponseDto confirmed = transition(order, OrderStatus.CONFIRMED, null, "SYSTEM", "COD selected");
-            savePaymentAttempt(id, key, method, fingerprint, 200, confirmed, null);
-            return new PaymentResult(200, confirmed);
+            order.setAwaitingAcceptanceSince(LocalDateTime.now());
+            Order saved = orderRepository.save(order);
+            historyRepository.save(new OrderStatusHistory(saved.getId(), OrderStatus.PLACED, OrderStatus.PLACED,
+                    null, "SYSTEM", "Cash on delivery selected; waiting for the branch to accept"));
+            OrderResponseDto pending = toOrderResponseDto(saved);
+            savePaymentAttempt(id, key, method, fingerprint, 200, pending, null);
+            return new PaymentResult(200, pending);
+        }
+
+        String problem = CardValidator.problemWith(card, YearMonth.now());
+        if (problem != null) {
+            throw new OrderApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_CARD_DETAILS", problem);
         }
 
         order.setPaymentMethod(method);
         order.setPaymentIdempotencyKey(key);
-        PaymentGateway.GatewayResult gatewayResult = paymentGateway.charge(order.getGrandTotal(),
-                request != null && request.isSuccess(), key);
+        PaymentGateway.GatewayResult gatewayResult = paymentGateway.charge(order.getGrandTotal(), card, key);
+        order.setCardBrand(gatewayResult.brand());
+        order.setCardLast4(gatewayResult.last4());
         if (gatewayResult.approved()) {
             order.setPaymentStatus(PaymentStatus.VERIFIED);
             order.setPaymentReference(gatewayResult.reference());
-            if (request != null && request.getStripePaymentIntentId() != null) {
-                order.setStripePaymentIntentId(request.getStripePaymentIntentId());
-            }
-            OrderResponseDto paid = transition(order, OrderStatus.PAYMENT_VERIFIED, null, "SYSTEM", "Card payment verified");
+            order.setAwaitingAcceptanceSince(LocalDateTime.now());
+            OrderResponseDto paid = transition(order, OrderStatus.PAYMENT_VERIFIED, null, "SYSTEM",
+                    "Card payment verified (" + gatewayResult.brand() + " **** " + gatewayResult.last4() + ")");
             savePaymentAttempt(id, key, method, fingerprint, 200, paid, gatewayResult.reference());
             return new PaymentResult(200, paid);
         }
@@ -697,12 +974,30 @@ public class OrderService {
         if (order.getPaymentAttempts() >= maxCardAttempts) {
             order.setCancellationReason("PAYMENT_FAILED");
             order.setPaymentStatus(PaymentStatus.VOIDED);
-            failed = transition(order, OrderStatus.CANCELLED, null, "SYSTEM", "Third card attempt declined");
+            failed = transition(order, OrderStatus.CANCELLED, null, "SYSTEM",
+                    "Card declined " + maxCardAttempts + " times");
         } else {
             failed = toOrderResponseDto(orderRepository.save(order));
         }
         savePaymentAttempt(id, key, method, fingerprint, 402, failed, null);
-        return new PaymentResult(402, failed);
+        return new PaymentResult(402, failed, gatewayResult.declineCode(), gatewayResult.message());
+    }
+
+    public int getMaxCardAttempts() {
+        return maxCardAttempts;
+    }
+
+    private PaymentGateway.CardDetails toCard(PaymentRequestDto request) {
+        PaymentRequestDto.CardDto card = request != null ? request.getCard() : null;
+        if (card == null) {
+            throw new OrderApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_CARD_DETAILS", "Card details are required");
+        }
+        return new PaymentGateway.CardDetails(
+                card.holderName() != null ? card.holderName().trim() : null,
+                CardValidator.normalizeNumber(card.number()),
+                card.expMonth() != null ? card.expMonth() : 0,
+                card.expYear() != null ? card.expYear() : 0,
+                card.cvc() != null ? card.cvc().trim() : null);
     }
 
     private void savePaymentAttempt(Long id, String key, PaymentMethod method, String fingerprint,
@@ -713,9 +1008,11 @@ public class OrderService {
         paymentAttemptRepository.save(attempt);
     }
 
-    private String paymentFingerprint(Long id, PaymentMethod method, boolean success, BigDecimal amount) {
+    /** Identifies a payment request without storing card data: only the last four digits and expiry are hashed. */
+    private String paymentFingerprint(Long id, PaymentMethod method, PaymentGateway.CardDetails card, BigDecimal amount) {
+        String cardPart = card == null ? "-" : card.last4() + "/" + card.expMonth() + "/" + card.expYear();
         try {
-            byte[] data = (id + ":" + method + ":" + success + ":" + amount).getBytes(StandardCharsets.UTF_8);
+            byte[] data = (id + ":" + method + ":" + cardPart + ":" + amount).getBytes(StandardCharsets.UTF_8);
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(data);
             return java.util.HexFormat.of().formatHex(digest);
         } catch (NoSuchAlgorithmException e) {
@@ -740,20 +1037,6 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    com.example.BigBite.order.dto.PaymentIntentResponseDto createPaymentIntent(Long id) {
-        Order order = findOrderOrThrow(id);
-        String mockClientSecret = "pi_mock_" + order.getId() + "_" + System.currentTimeMillis() + "_secret_mock";
-        String publishableKey = "pk_test_bigbite_sandbox";
-        return new com.example.BigBite.order.dto.PaymentIntentResponseDto(
-                mockClientSecret,
-                publishableKey,
-                order.getId(),
-                order.getGrandTotal(),
-                "lkr"
-        );
-    }
-
-    @Transactional(readOnly = true)
     PaymentOptionsDto getPaymentOptions(Long id) {
         Order order = findOrderOrThrow(id);
         CodEligibilityService.Eligibility cod = codEligibilityService.evaluate(order);
@@ -761,11 +1044,13 @@ public class OrderService {
                 PaymentMethod.CASH_ON_DELIVERY), cod.eligible(), cod.code(), cod.message());
     }
 
+    // ------------------------------------------------------------------ hand-over
+
     public OrderResponseDto collectCod(Long id, BigDecimal cashCollected, User actor) {
         Order order = findOrderOrThrow(id);
         transitionGuard.checkStaffActor(order, actor);
-        if (order.getFulfillmentType() == FulfillmentType.TAKEAWAY && actor.getRole() != Role.BRANCH_MANAGER) {
-            throw new OrderApiException(HttpStatus.FORBIDDEN, "MANAGER_REQUIRED", "Counter cash must be recorded by branch staff");
+        if (order.getFulfillmentType() == FulfillmentType.TAKEAWAY && actor.getRole() != Role.STAFF) {
+            throw new OrderApiException(HttpStatus.FORBIDDEN, "STAFF_REQUIRED", "Counter cash must be recorded by branch staff");
         }
         transitionGuard.checkCodCollect(order);
         if (cashCollected == null || cashCollected.compareTo(order.getGrandTotal()) < 0) {
@@ -812,6 +1097,8 @@ public class OrderService {
                         "ORDER_NOT_FOUND", "Order with id " + id + " not found"));
     }
 
+    // ------------------------------------------------------------------ addresses and claims
+
     @Transactional(readOnly = true)
     List<SavedAddress> getSavedAddresses(Long customerId) {
         if (customerId == null || savedAddressRepository == null) return List.of();
@@ -840,6 +1127,8 @@ public class OrderService {
         return new ClaimOrdersResponseDto(1, List.of(orderId), "Order linked to your account");
     }
 
+    // ------------------------------------------------------------------ scheduled housekeeping
+
     @Transactional
     public int autoCancelAbandonedOrders(int timeoutMinutes) {
         LocalDateTime cutoff = LocalDateTime.now().minusMinutes(timeoutMinutes);
@@ -855,13 +1144,49 @@ public class OrderService {
         return abandoned.size();
     }
 
+    /** Orders the branch never accepted are rejected automatically and refunded if they were paid. */
+    @Transactional
+    public int autoRejectUnacceptedOrders(int timeoutMinutes) {
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(timeoutMinutes);
+        List<Order> stale = orderRepository.findUnacceptedSince(cutoff);
+        for (Order order : stale) {
+            cancelWithRefund(order, "NOT_ACCEPTED", null,
+                    "Branch did not accept within " + timeoutMinutes + " minutes");
+        }
+        return stale.size();
+    }
+
+    @Transactional
+    public int retryPendingRefunds() {
+        int processed = 0;
+        for (Order order : orderRepository.findByRefundStatus(RefundStatus.PENDING)) {
+            if (order.getRefundAttempts() >= maxRefundAttempts) continue;
+            if (attemptRefund(order)) processed++;
+            orderRepository.save(order);
+        }
+        return processed;
+    }
+
     @Scheduled(fixedRate = 60000)
     @Transactional
     public void scheduleAutoCancelAbandonedOrders() {
         autoCancelAbandonedOrders(paymentTimeoutMinutes);
+        autoRejectUnacceptedOrders(acceptanceTimeoutMinutes);
     }
 
+    @Scheduled(fixedRate = 300000, initialDelay = 120000)
+    @Transactional
+    public void scheduleRefundRetries() {
+        retryPendingRefunds();
+    }
+
+    // ------------------------------------------------------------------ mapping
+
     private OrderResponseDto toOrderResponseDto(Order order) {
+        return toOrderResponseDto(order, new HashMap<>());
+    }
+
+    private OrderResponseDto toOrderResponseDto(Order order, Map<Long, User> riderCache) {
         OrderResponseDto dto = new OrderResponseDto();
         dto.setId(order.getId());
         dto.setCustomerId(order.getCustomerId());
@@ -899,6 +1224,24 @@ public class OrderService {
         dto.setDeliveredAt(order.getDeliveredAt());
         dto.setCreatedAt(order.getCreatedAt());
         dto.setUpdatedAt(order.getUpdatedAt());
+        dto.setAwaitingAcceptance(order.isAwaitingAcceptance());
+        dto.setAwaitingAcceptanceSince(order.getAwaitingAcceptanceSince());
+        dto.setAcceptedAt(order.getAcceptedAt());
+        dto.setCancelRequestStatus(order.getCancelRequestStatus());
+        dto.setCancelRequestReason(order.getCancelRequestReason());
+        dto.setCancelRequestedAt(order.getCancelRequestedAt());
+        dto.setCancelRequestNote(order.getCancelRequestNote());
+        dto.setCardBrand(order.getCardBrand());
+        dto.setCardLast4(order.getCardLast4());
+        dto.setRefundAttempts(order.getRefundAttempts());
+        if (order.getRiderId() != null && userRepository != null) {
+            User rider = riderCache.computeIfAbsent(order.getRiderId(),
+                    riderId -> userRepository.findById(riderId).orElse(null));
+            if (rider != null) {
+                dto.setRiderName(rider.getName());
+                dto.setRiderPhone(rider.getPhoneNumber());
+            }
+        }
 
         List<OrderItemResponseDto> itemDtos = order.getItems().stream()
                 .map(item -> new OrderItemResponseDto(

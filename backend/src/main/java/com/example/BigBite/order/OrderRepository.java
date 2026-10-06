@@ -43,4 +43,19 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     long countOpenCodOrders(@Param("customerId") Long customerId,
                             @Param("method") PaymentMethod method,
                             @Param("terminalStatuses") List<OrderStatus> terminalStatuses);
+
+    long countByBranchId(Long branchId);
+
+    List<Order> findByBranchIdAndRefundStatusOrderByCreatedAtDesc(Long branchId, RefundStatus refundStatus);
+
+    List<Order> findByRefundStatus(RefundStatus refundStatus);
+
+    List<Order> findByBranchIdAndCancelRequestStatusOrderByCreatedAtDesc(Long branchId, CancelRequestStatus status);
+
+    long countByRiderIdAndStatus(Long riderId, OrderStatus status);
+
+    @Query("SELECT o FROM Order o WHERE o.acceptedAt IS NULL AND o.awaitingAcceptanceSince < :cutoff " +
+            "AND (o.status = com.example.BigBite.order.OrderStatus.PAYMENT_VERIFIED OR " +
+            "(o.status = com.example.BigBite.order.OrderStatus.PLACED AND o.paymentMethod = com.example.BigBite.order.PaymentMethod.CASH_ON_DELIVERY))")
+    List<Order> findUnacceptedSince(@Param("cutoff") LocalDateTime cutoff);
 }

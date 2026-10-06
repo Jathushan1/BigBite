@@ -242,7 +242,8 @@ class MenuItemServiceTest {
     }
 
     private void loginAs(Role role, Long branchId) {
-        User user = new User("Test User", EMAIL, "password", role, UserStatus.ACTIVE);
+        User user = new User("Test User", EMAIL, "password", role,
+                role == Role.SUPER_ADMIN ? UserStatus.ACTIVE : UserStatus.APPROVED);
         user.setBranchId(branchId);
         when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
     }

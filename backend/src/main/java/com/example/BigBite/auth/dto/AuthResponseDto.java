@@ -10,6 +10,7 @@ public class AuthResponseDto {
     private Long id;
     private String name;
     private String email;
+    private String phoneNumber;
     private Role role;
     private UserStatus status;
     private Long branchId;
@@ -30,6 +31,13 @@ public class AuthResponseDto {
 
     public static AuthResponseDto success(String token, Long id, String name, String email, Role role, UserStatus status, Long branchId) {
         return new AuthResponseDto(token, id, name, email, role, status, branchId, "Authentication successful");
+    }
+
+    public static AuthResponseDto success(String token, com.example.BigBite.auth.User user) {
+        AuthResponseDto dto = success(token, user.getId(), user.getName(), user.getEmail(), user.getRole(),
+                user.getStatus(), user.getBranchId());
+        dto.setPhoneNumber(user.getPhoneNumber());
+        return dto;
     }
 
     public static AuthResponseDto pending(String message) {
@@ -109,5 +117,13 @@ public class AuthResponseDto {
 
     public void setMessage(String message) {
         this.message = message;
+    }
+
+    public String getPhoneNumber() {
+        return phoneNumber;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
     }
 }

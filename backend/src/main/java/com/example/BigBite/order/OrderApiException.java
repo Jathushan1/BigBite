@@ -1,17 +1,10 @@
 package com.example.BigBite.order;
 
+import com.example.BigBite.common.exception.ApiException;
 import org.springframework.http.HttpStatus;
 
-public class OrderApiException extends RuntimeException {
-    private final HttpStatus status;
-    private final String code;
-
+public class OrderApiException extends ApiException {
     public OrderApiException(HttpStatus status, String code, String message) {
-        super(message);
-        this.status = status;
-        this.code = code;
+        super(status, code, message);
     }
-
-    public HttpStatus getStatus() { return status; }
-    public String getCode() { return code; }
 }

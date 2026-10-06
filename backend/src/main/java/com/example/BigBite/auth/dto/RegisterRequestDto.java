@@ -24,11 +24,11 @@ public class RegisterRequestDto {
     private String phoneNumber;
 
     @NotBlank(message = "Password is required")
-    @Pattern(
-        regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&#])[A-Za-z\\d@$!%*?&#]{8,}$",
-        message = "Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a digit, and a special character (@$!%*?&#)"
-    )
+    @Pattern(regexp = PasswordPolicy.REGEX, message = PasswordPolicy.MESSAGE)
     private String password;
+
+    /** Required for staff and delivery partners: the branch they are applying to work at. */
+    private Long branchId;
 
     public RegisterRequestDto() {}
 
@@ -76,5 +76,13 @@ public class RegisterRequestDto {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public Long getBranchId() {
+        return branchId;
+    }
+
+    public void setBranchId(Long branchId) {
+        this.branchId = branchId;
     }
 }

@@ -1,5 +1,7 @@
 package com.example.BigBite.auth;
 
+import com.example.BigBite.branch.Branch;
+import com.example.BigBite.branch.BranchRepository;
 import com.example.BigBite.auth.dto.AuthResponseDto;
 import com.example.BigBite.auth.dto.LoginRequestDto;
 import com.example.BigBite.auth.dto.RegisterRequestDto;
@@ -39,6 +41,9 @@ class AuthServiceTest {
 
     @Mock
     private JwtUtil jwtUtil;
+
+    @Mock
+    private BranchRepository branchRepository;
 
     @InjectMocks
     private AuthService authService;
@@ -86,14 +91,17 @@ class AuthServiceTest {
         assertNotNull(response);
         assertNull(response.getToken());
         assertEquals(UserStatus.PENDING_APPROVAL, response.getStatus());
-        assertTrue(response.getMessage().contains("awaiting admin approval"));
+        assertTrue(response.getMessage().contains("awaiting Super Admin approval"));
         verify(userRepository).save(any(User.class));
     }
 
     @Test
-    @DisplayName("Delivery Partner registration sets PENDING_APPROVAL status and returns no token")
+    @DisplayName("Delivery Partner registration needs an active branch and waits for the branch manager")
     void testRegisterDeliveryPartner() {
         RegisterRequestDto riderDto = new RegisterRequestDto("Rider Dan", "dan@example.com", "0771234567", "Secret@123");
+        riderDto.setBranchId(3L);
+        when(branchRepository.findById(3L)).thenReturn(Optional.of(
+                new Branch("Kandy", "KDY", "1 Road", "Kandy", "0812345678", "k@bigbite.lk")));
         when(userRepository.existsByEmail("dan@example.com")).thenReturn(false);
         when(passwordEncoder.encode("Secret@123")).thenReturn("encodedPassword");
 
@@ -102,8 +110,19 @@ class AuthServiceTest {
         assertNotNull(response);
         assertNull(response.getToken());
         assertEquals(UserStatus.PENDING_APPROVAL, response.getStatus());
-        assertTrue(response.getMessage().contains("awaiting admin approval"));
-        verify(userRepository).save(any(User.class));
+        assertTrue(response.getMessage().contains("awaiting approval from the branch manager"));
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertEquals(3L, saved.getValue().getBranchId());
+    }
+
+    @Test
+    @DisplayName("Staff registration without a branch is rejected")
+    void testRegisterStaffRequiresBranch() {
+        RegisterRequestDto staffDto = new RegisterRequestDto("Kitchen Kim", "kim@example.com", "0771234567", "Secret@123");
+
+        assertThrows(IllegalArgumentException.class, () -> authService.registerStaff(staffDto));
+        verify(userRepository, never()).save(any(User.class));
     }
 
     @Test

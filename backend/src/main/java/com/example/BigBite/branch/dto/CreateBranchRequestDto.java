@@ -39,6 +39,10 @@ public class CreateBranchRequestDto {
     @JsonFormat(pattern = "HH:mm")
     private LocalTime closingTime;
 
+    private Boolean takeawayEnabled;
+
+    private Boolean codEnabled;
+
     public CreateBranchRequestDto() {}
 
     public CreateBranchRequestDto(String name, String branchCode, String address, String city, String phone, String email) {
@@ -128,5 +132,21 @@ public class CreateBranchRequestDto {
 
     public void setClosingTime(LocalTime closingTime) {
         this.closingTime = closingTime;
+    }
+
+    public Boolean getTakeawayEnabled() {
+        return takeawayEnabled;
+    }
+
+    public void setTakeawayEnabled(Boolean takeawayEnabled) {
+        this.takeawayEnabled = takeawayEnabled;
+    }
+
+    public Boolean getCodEnabled() {
+        return codEnabled;
+    }
+
+    public void setCodEnabled(Boolean codEnabled) {
+        this.codEnabled = codEnabled;
     }
 }
