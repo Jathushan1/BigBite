@@ -41,7 +41,7 @@ Staff and riders choose a branch when they register at `/register?mode=partner`;
 | Rider (Colombo) | rider.cmb03@bigbite.lk | Rider@123 |
 | Customer | customer@bigbite.lk | Customer@123 |
 
-Kandy (`kdy01`) and Galle (`gle01`) have the same accounts with their code in the email. The sign-in page has one-click buttons for these.
+Kandy (`kdy01`) and Galle (`gle01`) have the same accounts with their code in the email.
 
 **Test cards (mock gateway):** `4242 4242 4242 4242` approves; `4000 0000 0000 0002` declines; `…9995` insufficient funds; `…0069` expired. Use any future expiry and any CVC.
 
