@@ -1,5 +1,7 @@
 package com.example.BigBite.branch;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -37,6 +39,7 @@ public class Branch {
     private String email;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false)
     private BranchStatus status = BranchStatus.ACTIVE;
 
@@ -45,6 +48,12 @@ public class Branch {
 
     @Column(name = "closing_time")
     private LocalTime closingTime;
+
+    @Column(name = "takeaway_enabled", nullable = false, columnDefinition = "boolean default true")
+    private boolean takeawayEnabled = true;
+
+    @Column(name = "cod_enabled", nullable = false, columnDefinition = "boolean default true")
+    private boolean codEnabled = true;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -194,5 +203,38 @@ public class Branch {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public boolean isTakeawayEnabled() {
+        return takeawayEnabled;
+    }
+
+    public void setTakeawayEnabled(boolean takeawayEnabled) {
+        this.takeawayEnabled = takeawayEnabled;
+    }
+
+    public boolean isCodEnabled() {
+        return codEnabled;
+    }
+
+    public void setCodEnabled(boolean codEnabled) {
+        this.codEnabled = codEnabled;
+    }
+
+    /**
+     * True when the branch is ACTIVE and {@code now} falls inside its trading hours.
+     * Branches without hours are treated as always open; hours may wrap past midnight.
+     */
+    public boolean isOpenAt(LocalTime now) {
+        if (status != BranchStatus.ACTIVE) {
+            return false;
+        }
+        if (openingTime == null || closingTime == null || openingTime.equals(closingTime)) {
+            return true;
+        }
+        if (openingTime.isBefore(closingTime)) {
+            return !now.isBefore(openingTime) && now.isBefore(closingTime);
+        }
+        return !now.isBefore(openingTime) || now.isBefore(closingTime);
     }
 }

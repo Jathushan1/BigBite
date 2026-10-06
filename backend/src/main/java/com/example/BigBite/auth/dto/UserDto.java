@@ -11,6 +11,7 @@ public class UserDto {
     private Long id;
     private String name;
     private String email;
+    private String phoneNumber;
     private Role role;
     private UserStatus status;
     private Long branchId;
@@ -36,7 +37,7 @@ public class UserDto {
 
     public static UserDto fromEntity(User user) {
         if (user == null) return null;
-        return new UserDto(
+        UserDto dto = new UserDto(
             user.getId(),
             user.getName(),
             user.getEmail(),
@@ -48,6 +49,8 @@ public class UserDto {
             user.getApprovedBy(),
             user.getRejectionReason()
         );
+        dto.setPhoneNumber(user.getPhoneNumber());
+        return dto;
     }
 
     public Long getId() {
@@ -128,5 +131,13 @@ public class UserDto {
 
     public void setRejectionReason(String rejectionReason) {
         this.rejectionReason = rejectionReason;
+    }
+
+    public String getPhoneNumber() {
+        return phoneNumber;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
     }
 }

@@ -4,6 +4,9 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import com.example.BigBite.auth.User;
+import com.example.BigBite.auth.UserRepository;
+import com.example.BigBite.auth.UserStatus;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,10 +22,26 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
     private final CustomUserDetailsService userDetailsService;
+    private final UserRepository userRepository;
 
-    public JwtAuthFilter(JwtUtil jwtUtil, CustomUserDetailsService userDetailsService) {
+    public JwtAuthFilter(JwtUtil jwtUtil, CustomUserDetailsService userDetailsService, UserRepository userRepository) {
         this.jwtUtil = jwtUtil;
         this.userDetailsService = userDetailsService;
+        this.userRepository = userRepository;
+    }
+
+    /** Rejects tokens of suspended/rejected accounts and tokens issued before the last password change. */
+    private boolean isStillValid(String jwt, String email) {
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null || user.getStatus() == UserStatus.SUSPENDED || user.getStatus() == UserStatus.REJECTED) {
+            return false;
+        }
+        if (user.getPasswordChangedAt() == null) {
+            return true;
+        }
+        java.util.Date issuedAt = jwtUtil.extractClaim(jwt, io.jsonwebtoken.Claims::getIssuedAt);
+        java.time.Instant changedAt = user.getPasswordChangedAt().atZone(java.time.ZoneId.systemDefault()).toInstant();
+        return issuedAt != null && !issuedAt.toInstant().isBefore(changedAt);
     }
 
     @Override
@@ -46,7 +65,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             userEmail = jwtUtil.extractEmail(jwt);
 
             if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                if (jwtUtil.validateToken(jwt)) {
+                if (jwtUtil.validateToken(jwt) && isStillValid(jwt, userEmail)) {
                     UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             userDetails,

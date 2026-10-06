@@ -1,0 +1,92 @@
+/* ============================================================================
+   BigBite theme — every colour, the corner radius and the font in one place.
+
+   Edit a value here and the whole app follows: components only use these
+   tokens through Tailwind classes (bg-primary, text-muted-foreground,
+   border-border, text-success, …). Nothing in the components hard-codes a colour.
+
+   Design: calm and readable. Neutral surfaces, one muted brand red used for
+   actions and highlights, no gradients or glows, text contrast ≥ 4.5:1.
+   ============================================================================ */
+
+:root {
+  /* ---- Brand ---------------------------------------------------------------- */
+  --primary: #B3261E;              /* muted brick red: buttons, links, active states */
+  --primary-foreground: #FFFFFF;   /* text/icons on --primary */
+  --accent: #B3261E;               /* kept equal to primary so nothing competes with it */
+  --accent-foreground: #FFFFFF;
+
+  /* Derived shades (follow --primary automatically) */
+  --primary-hover: color-mix(in oklab, var(--primary) 90%, black);
+  --primary-active: color-mix(in oklab, var(--primary) 80%, black);
+
+  /* ---- Surfaces --------------------------------------------------------------- */
+  --background: #F6F6F7;           /* page */
+  --foreground: #1F2328;           /* body text */
+  --card: #FFFFFF;                 /* cards, panels */
+  --card-foreground: #1F2328;
+  --popover: #FFFFFF;              /* dialogs, menus, toasts */
+  --popover-foreground: #1F2328;
+  --secondary: #EFEFF1;            /* secondary buttons, subtle fills */
+  --secondary-foreground: #1F2328;
+  --muted: #EFEFF1;
+  --muted-foreground: #5F6672;     /* captions, timestamps */
+  --border: #E2E3E7;
+  --input: #D9DAE0;
+  --ring: #8A8F99;                 /* focus ring: visible but neutral */
+
+  /* ---- Feedback --------------------------------------------------------------- */
+  --success: #2E7D4F;
+  --warning: #9A5B0B;
+  --info: #2F5E9E;
+  --destructive: #B42318;
+  --destructive-foreground: #FFFFFF;
+
+  /* ---- Order status ----------------------------------------------------------- */
+  --status-placed: #6B7280;
+  --status-confirmed: #3B5B92;
+  --status-preparing: #9A5B0B;
+  --status-out-for-delivery: #5E5390;
+  --status-ready: #2F6F7A;
+  --status-completed: #2E7D4F;
+  --status-cancelled: #6B7280;
+  --status-refund-pending: #B42318;
+
+  /* ---- Shape & type ----------------------------------------------------------- */
+  --radius: 0.75rem;               /* base radius; every rounded-* class scales from it */
+  --app-font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --app-font-display: var(--app-font);
+}
+
+.dark {
+  --primary: #C9443B;
+  --accent: #C9443B;
+
+  --background: #131316;
+  --foreground: #E6E6E9;
+  --card: #1C1C20;
+  --card-foreground: #E6E6E9;
+  --popover: #1C1C20;
+  --popover-foreground: #E6E6E9;
+  --secondary: #26262B;
+  --secondary-foreground: #E6E6E9;
+  --muted: #26262B;
+  --muted-foreground: #A3A3AD;
+  --border: #2E2E34;
+  --input: #3A3A41;
+  --ring: #7D7D88;
+
+  --success: #6BBF8A;
+  --warning: #D9A441;
+  --info: #7FA6D9;
+  --destructive: #E5675F;
+
+  --status-placed: #A3A3AD;
+  --status-confirmed: #7FA6D9;
+  --status-preparing: #D9A441;
+  --status-out-for-delivery: #A99BD6;
+  --status-ready: #6FB3BE;
+  --status-completed: #6BBF8A;
+  --status-cancelled: #A3A3AD;
+  --status-refund-pending: #E5675F;
+}

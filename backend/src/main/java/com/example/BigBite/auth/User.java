@@ -1,6 +1,8 @@
 package com.example.BigBite.auth;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 
 @Entity
@@ -18,14 +20,19 @@ public class User {
     private String email;
 
     @Column(nullable = false)
+    private String phoneNumber;
+
+    @Column(nullable = false)
     private String password;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(nullable = false, length = 32)
     private Role role;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(nullable = false, length = 32)
     private UserStatus status;
 
     @Column(name = "branch_id")
@@ -43,15 +50,30 @@ public class User {
     @Column(name = "rejection_reason")
     private String rejectionReason;
 
+    /** Tokens issued before this instant are rejected, so a password change ends old sessions. */
+    @Column(name = "password_changed_at")
+    private LocalDateTime passwordChangedAt;
+
     public User() {}
 
     public User(String name, String email, String password, Role role, UserStatus status) {
         this.name = name;
         this.email = email;
+        this.phoneNumber = "0771234567";
         this.password = password;
         this.role = role;
         this.status = status;
     }
+
+    public User(String name, String email, String phoneNumber, String password, Role role, UserStatus status) {
+        this.name = name;
+        this.email = email;
+        this.phoneNumber = phoneNumber;
+        this.password = password;
+        this.role = role;
+        this.status = status;
+    }
+
 
     @PrePersist
     protected void onCreate() {
@@ -79,6 +101,14 @@ public class User {
 
     public String getEmail() {
         return email;
+    }
+
+    public String getPhoneNumber() {
+    return phoneNumber;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+    this.phoneNumber = phoneNumber;
     }
 
     public void setEmail(String email) {
@@ -147,5 +177,13 @@ public class User {
 
     public void setRejectionReason(String rejectionReason) {
         this.rejectionReason = rejectionReason;
+    }
+
+    public LocalDateTime getPasswordChangedAt() {
+        return passwordChangedAt;
+    }
+
+    public void setPasswordChangedAt(LocalDateTime passwordChangedAt) {
+        this.passwordChangedAt = passwordChangedAt;
     }
 }

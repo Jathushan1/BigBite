@@ -1,111 +1,85 @@
-import React, { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import React, { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { motion } from 'motion/react'
 import { AlertCircle, LogIn } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { AuthLayout } from '@/components/auth/AuthLayout'
+import { Field, PasswordInput } from '@/components/forms'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { errorMessage } from '@/lib/http'
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-
-  const { login, getRoleLandingPath } = useAuth()
+  const { user, login, getRoleLandingPath } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const from = (location.state as { from?: string } | null)?.from
+
+  useEffect(() => {
+    if (user) navigate(getRoleLandingPath(user.role), { replace: true })
+  }, [user, navigate, getRoleLandingPath])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setIsLoading(true)
-
     try {
-      const role = await login(email, password)
-      const redirectPath = getRoleLandingPath(role)
-      navigate(redirectPath)
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message)
-      } else {
-        setError('Login failed. Please check your credentials.')
-      }
+      const role = await login(email.trim(), password)
+      navigate(from && role === 'CUSTOMER' ? from : getRoleLandingPath(role), { replace: true })
+    } catch (err) {
+      setError(errorMessage(err, 'Login failed. Please check your credentials.'))
     } finally {
       setIsLoading(false)
     }
   }
 
+  const pending = error.toLowerCase().includes('awaiting')
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-extrabold text-amber-400 tracking-tight">BigBite</h1>
-          <p className="text-sm text-slate-400">Sign in to your account</p>
-        </div>
-
-        {error && (
-          <div className="bg-red-950/60 border border-red-800 text-red-300 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
-            <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-400 mt-0.5" />
-            <div>
-              <p className="font-medium">{error}</p>
-              {error.toLowerCase().includes('awaiting admin approval') && (
-                <p className="text-xs text-red-300/80 mt-1">
-                  Once the superadmin approves your application, you will be able to log in.
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <AuthLayout title="Welcome back" subtitle="Sign in to order, manage your branch or run the kitchen.">
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-2xl text-sm flex items-start gap-2"
+        >
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-              Email Address
-            </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="user@example.com"
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-sm focus:outline-none focus:border-amber-500 transition"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-              Password
-            </label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-sm focus:outline-none focus:border-amber-500 transition"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full py-3 px-4 rounded-xl bg-amber-500 text-slate-950 font-bold text-sm hover:bg-amber-400 transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
-          >
-            {isLoading ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-950 border-t-transparent"></div>
-            ) : (
-              <>
-                <LogIn className="w-4 h-4" />
-                <span>Sign In</span>
-              </>
+            <p className="font-bold">{error}</p>
+            {pending && (
+              <p className="text-xs opacity-90 mt-1">You will be able to sign in as soon as your application is approved.</p>
             )}
-          </button>
-        </form>
+          </div>
+        </motion.div>
+      )}
 
-        <div className="text-center text-xs text-slate-400 pt-2 border-t border-slate-800">
-          Don't have an account?{' '}
-          <Link to="/register" className="text-amber-400 hover:text-amber-300 font-semibold underline underline-offset-4">
-            Register here
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Field label="Email address">
+          <Input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+        </Field>
+        <Field label="Password">
+          <PasswordInput required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+        </Field>
+        <div className="flex justify-end -mt-1">
+          <Link to="/forgot-password" className="text-xs font-bold text-primary hover:underline">
+            Forgot password?
           </Link>
         </div>
-      </div>
-    </div>
+        <Button type="submit" variant="glow" size="lg" loading={isLoading} className="w-full">
+          {!isLoading && <LogIn className="w-4 h-4" />} Sign in
+        </Button>
+      </form>
+
+      <p className="text-center text-sm text-muted-foreground">
+        New to BigBite?{' '}
+        <Link to="/register" className="font-bold text-primary hover:underline">Create an account</Link>
+        {' · '}
+        <Link to="/order" className="font-bold text-foreground hover:underline">Order as guest</Link>
+      </p>
+    </AuthLayout>
   )
 }

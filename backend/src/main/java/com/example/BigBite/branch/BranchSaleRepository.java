@@ -18,4 +18,8 @@ public interface BranchSaleRepository extends JpaRepository<BranchSale, Long> {
     List<BranchSale> findBySaleDateBetweenAndStatus(LocalDateTime start, LocalDateTime end, String status);
 
     List<BranchSale> findByBranchId(Long branchId);
+
+    long countByBranchId(Long branchId);
+
+    boolean existsByOrderNumber(String orderNumber);
 }

@@ -8,10 +8,14 @@ import com.example.BigBite.auth.exception.AccountStatusException;
 import com.example.BigBite.auth.exception.EmailAlreadyExistsException;
 import com.example.BigBite.auth.exception.ResourceNotFoundException;
 import com.example.BigBite.auth.security.JwtUtil;
+import com.example.BigBite.branch.BranchRepository;
+import com.example.BigBite.branch.BranchStatus;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Locale;
 
 @Service
 public class AuthService {
@@ -19,90 +23,86 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final BranchRepository branchRepository;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
+                       BranchRepository branchRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.branchRepository = branchRepository;
     }
 
     @Transactional
     public AuthResponseDto registerCustomer(RegisterRequestDto request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new EmailAlreadyExistsException("Email is already registered: " + request.getEmail());
-        }
-
-        User user = new User(
-                request.getName(),
-                request.getEmail(),
-                passwordEncoder.encode(request.getPassword()),
-                Role.CUSTOMER,
-                UserStatus.ACTIVE
-        );
-
-        User savedUser = userRepository.save(user);
-        String token = jwtUtil.generateToken(savedUser);
-
-        return AuthResponseDto.success(
-                token,
-                savedUser.getId(),
-                savedUser.getName(),
-                savedUser.getEmail(),
-                savedUser.getRole(),
-                savedUser.getStatus(),
-                savedUser.getBranchId()
-        );
+        User savedUser = userRepository.save(newUser(request, Role.CUSTOMER, UserStatus.ACTIVE, null));
+        return AuthResponseDto.success(jwtUtil.generateToken(savedUser), savedUser);
     }
 
+    /** Managers apply without a branch; the Super Admin approves them and assigns one. */
     @Transactional
     public AuthResponseDto registerBranchManager(RegisterRequestDto request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new EmailAlreadyExistsException("Email is already registered: " + request.getEmail());
-        }
-
-        User user = new User(
-                request.getName(),
-                request.getEmail(),
-                passwordEncoder.encode(request.getPassword()),
-                Role.BRANCH_MANAGER,
-                UserStatus.PENDING_APPROVAL
-        );
-
-        userRepository.save(user);
-
-        return AuthResponseDto.pending("Registration successful. Your account is awaiting admin approval.");
+        userRepository.save(newUser(request, Role.BRANCH_MANAGER, UserStatus.PENDING_APPROVAL, null));
+        return AuthResponseDto.pending("Registration successful. Your account is awaiting Super Admin approval.");
     }
 
+    /** Staff apply to one branch; that branch's manager approves them. */
+    @Transactional
+    public AuthResponseDto registerStaff(RegisterRequestDto request) {
+        return registerBranchWorker(request, Role.STAFF);
+    }
+
+    /** Riders apply to one branch; that branch's manager approves them. */
     @Transactional
     public AuthResponseDto registerDeliveryPartner(RegisterRequestDto request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new EmailAlreadyExistsException("Email is already registered: " + request.getEmail());
+        return registerBranchWorker(request, Role.DELIVERY_PARTNER);
+    }
+
+    private AuthResponseDto registerBranchWorker(RegisterRequestDto request, Role role) {
+        Long branchId = request.getBranchId();
+        if (branchId == null) {
+            throw new IllegalArgumentException("Choose the branch you want to work at");
         }
+        boolean activeBranch = branchRepository.findById(branchId)
+                .map(branch -> branch.getStatus() == BranchStatus.ACTIVE)
+                .orElse(false);
+        if (!activeBranch) {
+            throw new IllegalArgumentException("The selected branch is not accepting applications");
+        }
+        userRepository.save(newUser(request, role, UserStatus.PENDING_APPROVAL, branchId));
+        return AuthResponseDto.pending("Registration successful. Your account is awaiting approval from the branch manager.");
+    }
 
+    private User newUser(RegisterRequestDto request, Role role, UserStatus status, Long branchId) {
+        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        if (userRepository.existsByEmail(email) || userRepository.existsByEmail(request.getEmail())) {
+            throw new EmailAlreadyExistsException("Email is already registered: " + email);
+        }
         User user = new User(
-                request.getName(),
-                request.getEmail(),
+                request.getName().trim(),
+                email,
+                request.getPhoneNumber() != null ? request.getPhoneNumber().trim() : null,
                 passwordEncoder.encode(request.getPassword()),
-                Role.DELIVERY_PARTNER,
-                UserStatus.PENDING_APPROVAL
+                role,
+                status
         );
-
-        userRepository.save(user);
-
-        return AuthResponseDto.pending("Registration successful. Your account is awaiting admin approval.");
+        user.setBranchId(branchId);
+        return user;
     }
 
     public AuthResponseDto login(LoginRequestDto request) {
-        User user = userRepository.findByEmail(request.getEmail())
+        String email = request.getEmail() == null ? "" : request.getEmail().trim();
+        User user = userRepository.findByEmail(email)
+                .or(() -> userRepository.findByEmail(email.toLowerCase(Locale.ROOT)))
                 .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new BadCredentialsException("Invalid email or password");
         }
 
-        // Account status flow check
         if (user.getStatus() == UserStatus.PENDING_APPROVAL) {
-            throw new AccountStatusException("Your account is awaiting admin approval");
+            String approver = user.getRole() == Role.BRANCH_MANAGER ? "admin" : "branch manager";
+            throw new AccountStatusException("Your account is awaiting " + approver + " approval");
         }
 
         if (user.getStatus() == UserStatus.REJECTED) {
@@ -115,17 +115,7 @@ public class AuthService {
         }
 
         // ACTIVE or APPROVED accounts are allowed to log in
-        String token = jwtUtil.generateToken(user);
-
-        return AuthResponseDto.success(
-                token,
-                user.getId(),
-                user.getName(),
-                user.getEmail(),
-                user.getRole(),
-                user.getStatus(),
-                user.getBranchId()
-        );
+        return AuthResponseDto.success(jwtUtil.generateToken(user), user);
     }
 
     public UserDto getCurrentUser(String email) {

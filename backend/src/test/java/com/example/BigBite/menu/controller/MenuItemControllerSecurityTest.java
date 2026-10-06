@@ -106,7 +106,7 @@ class MenuItemControllerSecurityTest {
     void customerCanViewMenuItems() {
         loginWithRole("CUSTOMER");
 
-        assertEquals(HttpStatus.OK, controller.getMenuItemsByBranch(1L).getStatusCode());
+        assertEquals(HttpStatus.OK, controller.getMenuItemsByBranch(1L, false).getStatusCode());
     }
 
     private void loginWithRole(String role) {

@@ -31,13 +31,13 @@ public class MenuItemController {
     }
 
     @GetMapping("/branch/{branchId}")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<List<MenuItemResponseDto>> getMenuItemsByBranch(@PathVariable Long branchId) {
-        return ResponseEntity.ok(menuItemService.getMenuItemsByBranch(branchId));
+    public ResponseEntity<List<MenuItemResponseDto>> getMenuItemsByBranch(
+            @PathVariable Long branchId,
+            @RequestParam(defaultValue = "false") boolean availableOnly) {
+        return ResponseEntity.ok(menuItemService.getMenuItemsByBranch(branchId, availableOnly));
     }
 
     @GetMapping("/{menuId}")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<MenuItemResponseDto> getMenuItemById(@PathVariable Long menuId) {
         return ResponseEntity.ok(menuItemService.getMenuItemById(menuId));
     }

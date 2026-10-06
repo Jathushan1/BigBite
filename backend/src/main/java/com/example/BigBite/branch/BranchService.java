@@ -1,6 +1,9 @@
 package com.example.BigBite.branch;
 
 import com.example.BigBite.auth.exception.ResourceNotFoundException;
+import com.example.BigBite.auth.UserRepository;
+import com.example.BigBite.menu.repository.MenuItemRepository;
+import com.example.BigBite.order.OrderRepository;
 import com.example.BigBite.branch.dto.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,10 +22,18 @@ public class BranchService {
 
     private final BranchRepository branchRepository;
     private final BranchSaleRepository branchSaleRepository;
+    private final MenuItemRepository menuItemRepository;
+    private final OrderRepository orderRepository;
+    private final UserRepository userRepository;
 
-    public BranchService(BranchRepository branchRepository, BranchSaleRepository branchSaleRepository) {
+    public BranchService(BranchRepository branchRepository, BranchSaleRepository branchSaleRepository,
+                         MenuItemRepository menuItemRepository, OrderRepository orderRepository,
+                         UserRepository userRepository) {
         this.branchRepository = branchRepository;
         this.branchSaleRepository = branchSaleRepository;
+        this.menuItemRepository = menuItemRepository;
+        this.orderRepository = orderRepository;
+        this.userRepository = userRepository;
     }
 
     @Transactional
@@ -44,6 +55,8 @@ public class BranchService {
         branch.setStatus(BranchStatus.ACTIVE);
         branch.setOpeningTime(request.getOpeningTime());
         branch.setClosingTime(request.getClosingTime());
+        branch.setTakeawayEnabled(request.getTakeawayEnabled() == null || request.getTakeawayEnabled());
+        branch.setCodEnabled(request.getCodEnabled() == null || request.getCodEnabled());
 
         Branch saved = branchRepository.save(branch);
         return BranchDto.fromEntity(saved);
@@ -99,9 +112,56 @@ public class BranchService {
         if (request.getClosingTime() != null) {
             branch.setClosingTime(request.getClosingTime());
         }
+        if (request.getTakeawayEnabled() != null) {
+            branch.setTakeawayEnabled(request.getTakeawayEnabled());
+        }
+        if (request.getCodEnabled() != null) {
+            branch.setCodEnabled(request.getCodEnabled());
+        }
 
         Branch saved = branchRepository.save(branch);
         return BranchDto.fromEntity(saved);
+    }
+
+    /** Branch manager edit: only contact details, trading hours and ordering flags. */
+    @Transactional
+    public BranchDto updateBranchAsManager(Long id, ManagerBranchUpdateDto request) {
+        Branch branch = branchRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Branch not found with id: " + id));
+        if (request.phone() != null && !request.phone().isBlank()) {
+            branch.setPhone(request.phone().trim());
+        }
+        if (request.email() != null && !request.email().isBlank()) {
+            branch.setEmail(request.email().trim().toLowerCase());
+        }
+        if (request.openingTime() != null) {
+            branch.setOpeningTime(request.openingTime());
+        }
+        if (request.closingTime() != null) {
+            branch.setClosingTime(request.closingTime());
+        }
+        if (request.takeawayEnabled() != null) {
+            branch.setTakeawayEnabled(request.takeawayEnabled());
+        }
+        if (request.codEnabled() != null) {
+            branch.setCodEnabled(request.codEnabled());
+        }
+        return BranchDto.fromEntity(branchRepository.save(branch));
+    }
+
+    @Transactional(readOnly = true)
+    public List<PublicBranchDto> getPublicBranches() {
+        return branchRepository.findByStatus(BranchStatus.ACTIVE).stream()
+                .sorted(Comparator.comparing(Branch::getName, String.CASE_INSENSITIVE_ORDER))
+                .map(PublicBranchDto::fromEntity)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PublicBranchDto getPublicBranch(Long id) {
+        return branchRepository.findById(id)
+                .map(PublicBranchDto::fromEntity)
+                .orElseThrow(() -> new ResourceNotFoundException("Branch not found with id: " + id));
     }
 
     @Transactional
@@ -148,6 +208,20 @@ public class BranchService {
     public void deleteBranch(Long id) {
         Branch branch = branchRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Branch not found with id: " + id));
+
+        List<String> dependents = new ArrayList<>();
+        long menuItems = menuItemRepository.countByBranchId(id);
+        long sales = branchSaleRepository.countByBranchId(id);
+        long orders = orderRepository.countByBranchId(id);
+        long staff = userRepository.countByBranchId(id);
+        if (menuItems > 0) dependents.add(menuItems + " menu item(s)");
+        if (orders > 0) dependents.add(orders + " order(s)");
+        if (sales > 0) dependents.add(sales + " sale record(s)");
+        if (staff > 0) dependents.add(staff + " staff account(s)");
+        if (!dependents.isEmpty()) {
+            throw new BranchInUseException("Branch '" + branch.getName() + "' still has "
+                    + String.join(", ", dependents) + ". Deactivate it instead of deleting.");
+        }
         branchRepository.delete(branch);
     }
 

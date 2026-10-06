@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 60" fill="none">
+  <!-- Red Emblem Badge with Bite Mark -->
+  <g transform="translate(6, 6)">
+    <!-- Shield / Badge Base -->
+    <rect x="0" y="0" width="48" height="48" rx="14" fill="#E4002B"/>
+    
+    <!-- Stylized Pizza Slice with Bite Curve -->
+    <path d="M12 36 L24 14 L36 36 C32 37 28 37.5 24 37.5 C20 37.5 16 37 12 36 Z" fill="#FFFFFF"/>
+    
+    <!-- Pizza Crust Arc -->
+    <path d="M11 36.5 C15.5 38 20 38.5 24 38.5 C28 38.5 32.5 38 37 36.5" stroke="#E4002B" stroke-width="2.5" stroke-linecap="round"/>
+    
+    <!-- Toppings / Details -->
+    <circle cx="20" cy="25" r="2.2" fill="#E4002B"/>
+    <circle cx="28" cy="27" r="2.5" fill="#E4002B"/>
+    <circle cx="23" cy="32" r="1.8" fill="#E4002B"/>
+    
+    <!-- Playful Bite Silhouette on the Top-Right Corner -->
+    <path d="M48 6 C43 6 39 10 39 15 C39 16.5 39.4 17.8 40 19 C38 20 37 22.5 37 25 C37 29.5 40.5 33 45 33 C46 33 47 32.8 48 32.4 Z" fill="#F8F9FA"/>
+  </g>
+  
+  <!-- Wordmark "BigBite" -->
+  <text x="68" y="38" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="28" letter-spacing="-0.8">
+    <tspan fill="#18181B">Big</tspan><tspan fill="#E4002B">Bite</tspan>
+  </text>
+  
+  <!-- Fast Food Tagline / Accent Dash -->
+  <circle cx="186" cy="24" r="3.5" fill="#E4002B"/>
+</svg>

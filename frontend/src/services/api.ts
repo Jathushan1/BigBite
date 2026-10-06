@@ -1,147 +1,69 @@
+import { apiRequest } from '@/lib/http'
 import type { AuthResponse, Role, User, UserStatus } from '../types/auth'
 
-const API_BASE = ''
+export { ApiError, errorMessage } from '@/lib/http'
 
-function getHeaders(): HeadersInit {
-  const token = localStorage.getItem('token')
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  return headers
-}
+export type PartnerVariant = 'branch-manager' | 'staff' | 'delivery-partner'
 
-export async function loginApi(email: string, password: string): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/api/auth/login`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ email, password }),
-  })
+// ---------------------------------------------------------------- auth
 
-  const data = await res.json()
-  if (!res.ok) {
-    throw new Error(data.message || 'Login failed')
-  }
-  return data
-}
+export const loginApi = (email: string, password: string) =>
+  apiRequest<AuthResponse>('/api/auth/login', { method: 'POST', body: { email, password } })
 
-export async function registerCustomerApi(name: string, email: string, password: string): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/api/auth/register/customer`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ name, email, password }),
-  })
-  const data = await res.json()
-  if (!res.ok) {
-    throw new Error(data.message || 'Registration failed')
-  }
-  return data
-}
+export const registerCustomerApi = (name: string, email: string, phoneNumber: string, password: string) =>
+  apiRequest<AuthResponse>('/api/auth/register/customer', { method: 'POST', body: { name, email, phoneNumber, password } })
 
-export async function registerStaffApi(
-  variant: 'branch-manager' | 'delivery-partner',
+export const registerStaffApi = (
+  variant: PartnerVariant,
   name: string,
   email: string,
-  password: string
-): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/api/auth/register/${variant}`, {
+  phoneNumber: string,
+  password: string,
+  branchId?: number
+) =>
+  apiRequest<AuthResponse>(`/api/auth/register/${variant}`, {
     method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ name, email, password }),
+    body: { name, email, phoneNumber, password, branchId },
   })
-  const data = await res.json()
-  if (!res.ok) {
-    throw new Error(data.message || 'Registration failed')
-  }
-  return data
+
+export const getMeApi = () => apiRequest<User>('/api/auth/me')
+
+export const forgotPasswordApi = (email: string) =>
+  apiRequest<{ message: string }>('/api/auth/forgot-password', { method: 'POST', body: { email } })
+
+export const resetPasswordApi = (token: string, newPassword: string) =>
+  apiRequest<{ message: string }>('/api/auth/reset-password', { method: 'POST', body: { token, newPassword } })
+
+export const changePasswordApi = (currentPassword: string, newPassword: string) =>
+  apiRequest<{ message: string }>('/api/auth/change-password', { method: 'PUT', body: { currentPassword, newPassword } })
+
+// ---------------------------------------------------------------- Super Admin: users
+
+export const getPendingUsersApi = () => apiRequest<User[]>('/api/admin/users/pending')
+
+export const approveUserApi = (userId: number) => apiRequest<User>(`/api/admin/users/${userId}/approve`, { method: 'PUT' })
+
+export const rejectUserApi = (userId: number, reason?: string) =>
+  apiRequest<User>(`/api/admin/users/${userId}/reject`, { method: 'PUT', body: { reason } })
+
+export const assignBranchApi = (userId: number, branchId: number) =>
+  apiRequest<User>(`/api/admin/users/${userId}/assign-branch`, { method: 'PUT', body: { branchId } })
+
+export const getUsersFilteredApi = (role?: Role, status?: UserStatus) =>
+  apiRequest<User[]>('/api/admin/users', { query: { role, status } })
+
+export const deleteUserApi = (userId: number) => apiRequest<void>(`/api/admin/users/${userId}`, { method: 'DELETE' })
+
+// ---------------------------------------------------------------- dev outbox (mock email)
+
+export interface OutboxMessage {
+  id: number
+  to: string
+  subject: string
+  body: string
+  actionUrl?: string | null
+  sentAt: string
 }
 
-export async function getMeApi(): Promise<User> {
-  const res = await fetch(`${API_BASE}/api/auth/me`, {
-    headers: getHeaders(),
-  })
-  const data = await res.json()
-  if (!res.ok) {
-    throw new Error(data.message || 'Failed to fetch user')
-  }
-  return data
-}
-
-// SuperAdmin Endpoints
-export async function getPendingUsersApi(): Promise<User[]> {
-  const res = await fetch(`${API_BASE}/api/admin/users/pending`, {
-    headers: getHeaders(),
-  })
-  const data = await res.json()
-  if (!res.ok) {
-    throw new Error(data.message || 'Failed to fetch pending users')
-  }
-  return data
-}
-
-export async function approveUserApi(userId: number): Promise<User> {
-  const res = await fetch(`${API_BASE}/api/admin/users/${userId}/approve`, {
-    method: 'PUT',
-    headers: getHeaders(),
-  })
-  const data = await res.json()
-  if (!res.ok) {
-    throw new Error(data.message || 'Failed to approve user')
-  }
-  return data
-}
-
-export async function rejectUserApi(userId: number, reason?: string): Promise<User> {
-  const res = await fetch(`${API_BASE}/api/admin/users/${userId}/reject`, {
-    method: 'PUT',
-    headers: getHeaders(),
-    body: JSON.stringify({ reason }),
-  })
-  const data = await res.json()
-  if (!res.ok) {
-    throw new Error(data.message || 'Failed to reject user')
-  }
-  return data
-}
-
-export async function assignBranchApi(userId: number, branchId: number): Promise<User> {
-  const res = await fetch(`${API_BASE}/api/admin/users/${userId}/assign-branch`, {
-    method: 'PUT',
-    headers: getHeaders(),
-    body: JSON.stringify({ branchId }),
-  })
-  const data = await res.json()
-  if (!res.ok) {
-    throw new Error(data.message || 'Failed to assign branch')
-  }
-  return data
-}
-
-export async function getUsersFilteredApi(role?: Role, status?: UserStatus): Promise<User[]> {
-  const params = new URLSearchParams()
-  if (role) params.append('role', role)
-  if (status) params.append('status', status)
-
-  const res = await fetch(`${API_BASE}/api/admin/users?${params.toString()}`, {
-    headers: getHeaders(),
-  })
-  const data = await res.json()
-  if (!res.ok) {
-    throw new Error(data.message || 'Failed to fetch users')
-  }
-  return data
-}
-
-export async function deleteUserApi(userId: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/admin/users/${userId}`, {
-    method: 'DELETE',
-    headers: getHeaders(),
-  })
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    throw new Error(data.message || 'Failed to delete user')
-  }
-}
-
+export const getOutboxApi = () => apiRequest<OutboxMessage[]>('/api/dev/outbox')
+export const clearOutboxApi = () => apiRequest<void>('/api/dev/outbox', { method: 'DELETE' })
