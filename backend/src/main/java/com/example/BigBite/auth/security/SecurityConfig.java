@@ -31,11 +31,14 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final boolean outboxPublic;
+    private final List<String> allowedOrigins;
 
     public SecurityConfig(JwtAuthFilter jwtAuthFilter,
-                          @Value("${app.mail.outbox-public:true}") boolean outboxPublic) {
+                          @Value("${app.mail.outbox-public:true}") boolean outboxPublic,
+                          @Value("${app.cors.allowed-origins:http://localhost:*,http://127.0.0.1:*}") List<String> allowedOrigins) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.outboxPublic = outboxPublic;
+        this.allowedOrigins = allowedOrigins;
     }
 
     private static void writeError(HttpServletResponse response, int status, String code, String message)
@@ -99,13 +102,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of(
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:5173",
-            "http://localhost:4173"
-        ));
+        configuration.setAllowedOriginPatterns(allowedOrigins);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "Origin", "X-Guest-Token", "Idempotency-Key"));
         configuration.setAllowCredentials(true);

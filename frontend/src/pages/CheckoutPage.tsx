@@ -120,6 +120,13 @@ export function CheckoutPage() {
     e.preventDefault()
     setError(null)
 
+    if (user && user.role !== 'CUSTOMER') {
+      const msg = 'You are signed in as branch or admin staff. Sign out, or sign in as a customer, to place an order.'
+      setError(msg)
+      toast.error(msg)
+      return
+    }
+
     if (!contactName.trim()) {
       setError('Please provide a contact name.')
       toast.error('Please provide a contact name.')

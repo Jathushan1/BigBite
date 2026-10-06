@@ -75,7 +75,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       error?: string
       errors?: Record<string, string>
     }
-    const message = body.message || `Request failed (${res.status})`
+    const text = typeof data === 'string' ? data.trim() : ''
+    const message = body.message || (text && text.length < 200 ? text : '') ||
+      (res.status === 403 ? 'You are not allowed to do this' : `Request failed (${res.status})`)
     throw new ApiError(message, res.status, body.error, body.errors, data)
   }
 
