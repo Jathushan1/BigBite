@@ -156,8 +156,8 @@ export const DeliveryDashboard: React.FC = () => {
             'text-[11px] font-bold px-2 py-0.5 rounded-md border inline-flex items-center gap-1',
             o.paymentMethod === 'CASH_ON_DELIVERY'
               ? o.paymentStatus === 'VERIFIED'
-                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                ? 'bg-success/10 text-success dark:text-success border-success/20'
+                : 'bg-warning/10 text-warning dark:text-warning border-warning/20'
               : 'bg-primary/10 text-primary border-primary/20'
           )}
         >
@@ -262,7 +262,7 @@ export const DeliveryDashboard: React.FC = () => {
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <span className="px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center justify-center gap-1.5">
+            <span className="px-4 py-2 rounded-xl bg-success/10 border border-success/20 text-success dark:text-success text-xs font-bold flex items-center justify-center gap-1.5">
               <CheckCircle className="w-4 h-4" /> Ready for Deliveries
             </span>
             <Link to="/staff/orders">
@@ -296,7 +296,7 @@ export const DeliveryDashboard: React.FC = () => {
             </div>
             <h3 className="font-bold text-foreground">Live Dispatch Queue</h3>
             <p className="text-xs text-muted-foreground">
-              View deliveries assigned to you by the branch manager.
+              View deliveries the branch staff dispatched to you.
             </p>
             <Link
               to="/staff/orders"
@@ -367,7 +367,7 @@ export const DeliveryDashboard: React.FC = () => {
             <DialogContent className="max-w-md p-6 sm:p-7 space-y-5">
               <DialogHeader className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-warning/10 text-warning dark:text-warning border border-warning/20">
                     <Banknote className="w-3.5 h-3.5" /> Cash on Delivery Collection
                   </span>
                   <span className="text-xs font-bold text-muted-foreground">
@@ -411,16 +411,16 @@ export const DeliveryDashboard: React.FC = () => {
               </div>
 
               {/* Prominent Amount Box (Amber Highlight) */}
-              <div className="rounded-2xl p-5 border border-amber-500/30 bg-amber-500/10 dark:bg-amber-950/20 flex items-center justify-between">
+              <div className="rounded-2xl p-5 border border-warning/30 bg-warning/10 dark:bg-warning/20 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                  <div className="w-12 h-12 rounded-2xl bg-warning/20 text-warning dark:text-warning flex items-center justify-center font-bold">
                     <Banknote className="w-6 h-6" />
                   </div>
                   <div>
                     <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                       Total Cash Due
                     </span>
-                    <span className="text-2xl font-black text-amber-600 dark:text-amber-400 tracking-tight">
+                    <span className="text-2xl font-black text-warning dark:text-warning tracking-tight">
                       LKR {cashCollectionOrder.grandTotal.toFixed(2)}
                     </span>
                   </div>
@@ -453,7 +453,7 @@ export const DeliveryDashboard: React.FC = () => {
                   type="button"
                   disabled={!cashReceived || Number(cashReceived) < cashCollectionOrder.grandTotal || submittingCash}
                   onClick={handleConfirmCashCollection}
-                  className="gap-1.5 rounded-xl font-bold bg-amber-600 hover:bg-amber-700 text-white"
+                  className="gap-1.5 rounded-xl font-bold bg-warning hover:bg-warning text-white"
                 >
                   {submittingCash && <Loader2 className="w-4 h-4 animate-spin" />}
                   <span>Confirm Cash Collected & Mark Paid</span>

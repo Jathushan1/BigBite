@@ -123,10 +123,10 @@ export function Toaster() {
       {toasts.map((t) => {
         const icons = {
           default: null,
-          success: <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />,
+          success: <CheckCircle2 className="h-5 w-5 text-success shrink-0 mt-0.5" />,
           error: <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />,
-          warning: <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />,
-          info: <Info className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />,
+          warning: <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />,
+          info: <Info className="h-5 w-5 text-info shrink-0 mt-0.5" />,
         }
 
         return (

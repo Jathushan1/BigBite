@@ -18,7 +18,8 @@ import {
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { placeOrder, getSavedAddresses } from '../api/orderApi'
-import { MOCK_BRANCHES } from '../mocks/orderMockData'
+import { getPublicBranch } from '@/api/branchApi'
+import { useAsync } from '@/hooks/useAsync'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/sonner'
@@ -73,7 +74,10 @@ export function CheckoutPage() {
       : `idemp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
   )
 
-  const branch = MOCK_BRANCHES.find((b) => b.id === branchId)
+  const { data: branch } = useAsync(
+    () => (branchId ? getPublicBranch(branchId) : Promise.resolve(undefined)),
+    [branchId]
+  )
 
   useEffect(() => {
     if (user) {
@@ -247,7 +251,7 @@ export function CheckoutPage() {
               </p>
             </div>
             {user && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-success/10 text-success dark:text-success border border-success/20">
                 <ShieldCheck className="w-3.5 h-3.5" />
                 Account Linked
               </span>
@@ -291,13 +295,13 @@ export function CheckoutPage() {
                   placeholder="e.g. 0771234567"
                   className={cn(
                     'pl-10 pr-10',
-                    contactPhone.trim() && (isPhoneValid ? 'border-emerald-500 focus-visible:ring-emerald-500' : 'border-destructive focus-visible:ring-destructive')
+                    contactPhone.trim() && (isPhoneValid ? 'border-success focus-visible:ring-success' : 'border-destructive focus-visible:ring-destructive')
                   )}
                 />
                 {contactPhone.trim() && (
                   <div className="absolute right-3.5 top-3.5">
                     {isPhoneValid ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      <CheckCircle2 className="w-4 h-4 text-success" />
                     ) : (
                       <AlertCircle className="w-4 h-4 text-destructive" />
                     )}
@@ -351,13 +355,13 @@ export function CheckoutPage() {
 
             <button
               type="button"
-              disabled={branch && !branch.takeaway}
+              disabled={branch && !branch.takeawayEnabled}
               onClick={() => setFulfillmentType('TAKEAWAY')}
               className={cn(
                 'flex items-center justify-center gap-2 py-3 px-4 rounded-xl border text-sm font-bold transition',
                 fulfillmentType === 'TAKEAWAY'
                   ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary/20 cursor-pointer'
-                  : branch && !branch.takeaway
+                  : branch && !branch.takeawayEnabled
                   ? 'border-border/60 bg-muted/40 text-muted-foreground cursor-not-allowed opacity-60'
                   : 'border-border bg-secondary text-muted-foreground hover:text-foreground cursor-pointer'
               )}
@@ -518,7 +522,7 @@ export function CheckoutPage() {
               <span className="font-semibold text-foreground">Rs. {taxAmount.toFixed(2)}</span>
             </div>
             {discountAmount > 0 && (
-              <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
+              <div className="flex justify-between text-success dark:text-success font-bold">
                 <span>Promo Discount ({promoCode})</span>
                 <span>- Rs. {discountAmount.toFixed(2)}</span>
               </div>
@@ -531,7 +535,7 @@ export function CheckoutPage() {
 
           {/* Minimum Order Value Warning (Inline) */}
           {subtotal < MIN_ORDER_SUBTOTAL && (
-            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-2.5 text-xs text-amber-600 dark:text-amber-400">
+            <div className="p-4 rounded-2xl bg-warning/10 border border-warning/20 flex items-start gap-2.5 text-xs text-warning dark:text-warning">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span className="leading-snug">
                 Minimum order subtotal is <strong>Rs. {MIN_ORDER_SUBTOTAL.toFixed(2)}</strong>. Please add{' '}

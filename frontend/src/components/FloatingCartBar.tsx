@@ -1,56 +1,48 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { ShoppingBag, ArrowRight } from 'lucide-react'
+import { AnimatePresence, motion } from 'motion/react'
+import { ArrowRight, ShoppingBag } from 'lucide-react'
 import { Button } from './ui/button'
 import { useCart } from '@/context/CartContext'
-import { cn } from '@/lib/utils'
+import { formatLKR } from '@/lib/format'
 
-interface FloatingCartBarProps {
-  className?: string
-}
-
-export const FloatingCartBar: React.FC<FloatingCartBarProps> = ({ className }) => {
+export const FloatingCartBar: React.FC = () => {
   const { totalCount, grandTotal } = useCart()
 
-  if (totalCount === 0) return null
-
   return (
-    <div
-      className={cn(
-        'fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-lg z-40 animate-in fade-in slide-in-from-bottom-6 duration-300',
-        className
+    <AnimatePresence>
+      {totalCount > 0 && (
+        <motion.div
+          initial={{ y: 120, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 120, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-lg z-30"
+        >
+          <div className="flex items-center justify-between gap-4 rounded-3xl border border-border bg-popover/95 p-3.5 shadow-2xl backdrop-blur-xl">
+            <div className="flex items-center gap-3.5 pl-1">
+              <div className="relative grid h-11 w-11 place-items-center rounded-2xl bg-primary/15 text-primary">
+                <ShoppingBag className="h-5 w-5" />
+                <motion.span
+                  key={totalCount}
+                  initial={{ scale: 0.3 }}
+                  animate={{ scale: 1 }}
+                  className="absolute -top-1.5 -right-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-[11px] font-black text-primary-foreground"
+                >
+                  {totalCount}
+                </motion.span>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">{totalCount} {totalCount === 1 ? 'item' : 'items'} · estimated</div>
+                <div className="text-lg font-black text-foreground">{formatLKR(grandTotal)}</div>
+              </div>
+            </div>
+            <Link to="/cart">
+              <Button variant="glow" className="rounded-2xl">View cart <ArrowRight className="h-4 w-4" /></Button>
+            </Link>
+          </div>
+        </motion.div>
       )}
-    >
-      <div className="bg-neutral-950/95 dark:bg-card/95 text-white backdrop-blur-xl border border-white/15 dark:border-border p-3.5 sm:p-4 rounded-3xl shadow-2xl shadow-black/40 flex items-center justify-between gap-4">
-        {/* Left: Cart Info & Badge */}
-        <div className="flex items-center gap-3.5 pl-2">
-          <div className="relative">
-            <div className="w-11 h-11 rounded-2xl bg-primary/20 border border-primary/40 text-accent flex items-center justify-center">
-              <ShoppingBag className="w-5 h-5" />
-            </div>
-            <span className="absolute -top-1.5 -right-1.5 bg-primary text-white text-[11px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-neutral-950 dark:border-card animate-badge-bump">
-              {totalCount}
-            </span>
-          </div>
-
-          <div>
-            <div className="text-xs text-neutral-400 font-medium">
-              {totalCount} {totalCount === 1 ? 'item' : 'items'} in cart
-            </div>
-            <div className="text-base sm:text-lg font-black text-white">
-              LKR {grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Checkout CTA */}
-        <Link to="/cart">
-          <Button variant="glow" size="default" className="gap-2 px-5 rounded-2xl">
-            <span>View Cart</span>
-            <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-          </Button>
-        </Link>
-      </div>
-    </div>
+    </AnimatePresence>
   )
 }

@@ -102,8 +102,8 @@ export const WelcomePage: React.FC = () => {
 
                 {/* Floating Tag 1: Top Rated */}
                 <div className="absolute -top-4 -left-4 bg-black/80 backdrop-blur-md border border-white/20 p-3 rounded-2xl shadow-xl flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
-                    <Star className="w-5 h-5 fill-amber-400" />
+                  <div className="w-10 h-10 rounded-xl bg-warning/20 text-warning flex items-center justify-center font-bold">
+                    <Star className="w-5 h-5 fill-warning" />
                   </div>
                   <div>
                     <div className="text-xs font-black text-white">4.9 / 5.0 Rating</div>

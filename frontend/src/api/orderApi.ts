@@ -1,72 +1,35 @@
+import { ApiError, apiRequest, guestTokenKey } from '@/lib/http'
 import type {
+  BillResponse,
+  ClaimOrdersResponse,
+  Complaint,
+  DeliveryTracking,
+  Feedback,
   OrderRequest,
   OrderResponse,
-  BillResponse,
   OrderStatus,
-  SavedAddress,
-  ClaimOrdersResponse,
-  PaymentRequest,
-  PaymentIntentResponse,
+  OrderStatusHistoryEntry,
   PaymentOptions,
+  PaymentRequest,
+  Review,
+  RiderAvailability,
+  SavedAddress,
 } from '../types/order'
-import type { User } from '../types/auth'
 
-const guestTokenKey = (orderId: number) => `bigbite.guestToken.${orderId}`
+export { ApiError as OrderApiError } from '@/lib/http'
+export type { OrderStatusHistoryEntry } from '../types/order'
 
-function getHeaders(orderId?: number): HeadersInit {
-  const token = localStorage.getItem('token')
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  if (orderId) {
-    const guestToken = sessionStorage.getItem(guestTokenKey(orderId))
-    if (guestToken) headers['X-Guest-Token'] = guestToken
-  }
-  return headers
-}
-
-async function handleResponse<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    let errorMsg = `Request failed with status ${res.status}`
-    let errorCode: string | undefined
-    try {
-      const errorData = await res.json()
-      if (errorData && errorData.message) {
-        errorMsg = errorData.message
-      }
-      errorCode = errorData?.error
-    } catch {
-      // Body not JSON
-    }
-    throw new OrderApiError(errorMsg, res.status, errorCode)
-  }
-  return res.json() as Promise<T>
-}
-
-export class OrderApiError extends Error {
-  status: number
-  code?: string
-
-  constructor(message: string, status: number, code?: string) {
-    super(message)
-    this.status = status
-    this.code = code
-  }
-}
+// ---------------------------------------------------------------- customer / guest
 
 export async function placeOrder(payload: OrderRequest): Promise<OrderResponse> {
   const previousToken = payload.idempotencyKey
     ? sessionStorage.getItem(`bigbite.createToken.${payload.idempotencyKey}`)
     : null
-  const res = await fetch('/api/orders', {
+  const order = await apiRequest<OrderResponse>('/api/orders', {
     method: 'POST',
-    headers: { ...getHeaders(), ...(previousToken ? { 'X-Guest-Token': previousToken } : {}) },
-    body: JSON.stringify(payload),
+    body: payload,
+    headers: previousToken ? { 'X-Guest-Token': previousToken } : undefined,
   })
-  const order = await handleResponse<OrderResponse>(res)
   if (order.guestToken) {
     sessionStorage.setItem(guestTokenKey(order.id), order.guestToken)
     if (payload.idempotencyKey) sessionStorage.setItem(`bigbite.createToken.${payload.idempotencyKey}`, order.guestToken)
@@ -74,163 +37,105 @@ export async function placeOrder(payload: OrderRequest): Promise<OrderResponse> 
   return order
 }
 
-export async function getOrder(id: number): Promise<OrderResponse> {
-  const res = await fetch(`/api/orders/${id}`, {
-    headers: getHeaders(id),
-  })
-  return handleResponse<OrderResponse>(res)
-}
+export const getOrder = (id: number) => apiRequest<OrderResponse>(`/api/orders/${id}`, { orderId: id })
 
-export async function getOrderBill(id: number): Promise<BillResponse> {
-  const res = await fetch(`/api/orders/${id}/bill`, {
-    headers: getHeaders(id),
-  })
-  return handleResponse<BillResponse>(res)
-}
+export const getOrderBill = (id: number) => apiRequest<BillResponse>(`/api/orders/${id}/bill`, { orderId: id })
 
-export async function cancelOrder(id: number): Promise<OrderResponse> {
-  const res = await fetch(`/api/orders/${id}/cancel`, {
+export const cancelOrder = (id: number, reason?: string) =>
+  apiRequest<OrderResponse>(`/api/orders/${id}/cancel`, { method: 'POST', orderId: id, body: reason ? { reason } : undefined })
+
+export const requestCancellation = (id: number, reason: string) =>
+  apiRequest<OrderResponse>(`/api/orders/${id}/cancel-request`, { method: 'POST', orderId: id, body: { reason } })
+
+export const updateOrderItem = (orderId: number, itemId: number, quantity: number) =>
+  apiRequest<OrderResponse>(`/api/orders/${orderId}/items/${itemId}`, { method: 'PATCH', orderId, body: { quantity } })
+
+/** Card or COD payment. A declined card throws ApiError with status 402 and a PaymentDeclined body. */
+export const submitPayment = (id: number, payload: PaymentRequest, idempotencyKey: string = crypto.randomUUID()) =>
+  apiRequest<OrderResponse>(`/api/orders/${id}/payment`, {
     method: 'POST',
-    headers: getHeaders(id),
+    orderId: id,
+    body: payload,
+    headers: { 'Idempotency-Key': idempotencyKey },
   })
-  return handleResponse<OrderResponse>(res)
-}
 
-export async function updateOrderItem(orderId: number, itemId: number, quantity: number): Promise<OrderResponse> {
-  const res = await fetch(`/api/orders/${orderId}/items/${itemId}`, {
-    method: 'PATCH',
-    headers: getHeaders(orderId),
-    body: JSON.stringify({ quantity }),
-  })
-  return handleResponse<OrderResponse>(res)
-}
+export const getPaymentOptions = (id: number) =>
+  apiRequest<PaymentOptions>(`/api/orders/${id}/payment-options`, { orderId: id })
 
-export async function submitPayment(id: number, payload: PaymentRequest | boolean, idempotencyKey?: string): Promise<OrderResponse> {
-  const body = typeof payload === 'boolean'
-    ? { paymentMethod: 'CARD_STRIPE', success: payload }
-    : payload
+export const getStatusHistory = (id: number) =>
+  apiRequest<OrderStatusHistoryEntry[]>(`/api/orders/${id}/history`, { orderId: id })
 
-  const res = await fetch(`/api/orders/${id}/payment`, {
-    method: 'POST',
-    headers: { ...getHeaders(id), 'Idempotency-Key': idempotencyKey ?? crypto.randomUUID() },
-    body: JSON.stringify(body),
-  })
-  return handleResponse<OrderResponse>(res)
-}
+export const getTracking = (id: number) =>
+  apiRequest<DeliveryTracking | undefined>(`/api/orders/${id}/tracking`, { orderId: id })
 
-export async function createPaymentIntent(id: number): Promise<PaymentIntentResponse> {
-  const res = await fetch(`/api/orders/${id}/payment-intent`, {
-    method: 'POST',
-    headers: getHeaders(id),
-  })
-  return handleResponse<PaymentIntentResponse>(res)
-}
+export const getFeedback = (id: number) => apiRequest<Feedback>(`/api/orders/${id}/feedback`, { orderId: id })
 
-export async function getPaymentOptions(id: number): Promise<PaymentOptions> {
-  const res = await fetch(`/api/orders/${id}/payment-options`, { headers: getHeaders(id) })
-  return handleResponse<PaymentOptions>(res)
-}
+export const submitReview = (id: number, rating: number, comment?: string) =>
+  apiRequest<Review>(`/api/orders/${id}/review`, { method: 'POST', orderId: id, body: { rating, comment } })
 
-export async function collectCod(id: number, cashCollected: number): Promise<OrderResponse> {
-  const res = await fetch(`/api/orders/${id}/cod/collect`, {
-    method: 'POST', headers: getHeaders(id), body: JSON.stringify({ cashCollected }),
-  })
-  return handleResponse<OrderResponse>(res)
-}
+export const fileComplaint = (id: number, category: string, description: string) =>
+  apiRequest<Complaint>(`/api/orders/${id}/complaints`, { method: 'POST', orderId: id, body: { category, description } })
 
-export async function markDeliveryFailed(id: number, reason: string): Promise<OrderResponse> {
-  const res = await fetch(`/api/orders/${id}/delivery-failed`, {
-    method: 'POST', headers: getHeaders(id), body: JSON.stringify({ reason }),
-  })
-  return handleResponse<OrderResponse>(res)
-}
+export const getOrderHistory = (customerId?: number) =>
+  apiRequest<OrderResponse[]>('/api/orders', { query: { customerId } })
 
-export interface OrderStatusHistoryEntry {
-  id: number
-  orderId: number
-  fromStatus: OrderStatus | null
-  toStatus: OrderStatus
-  actorId: number | null
-  actorRole: string
-  note: string | null
-  changedAt: string
-}
+export const getSavedAddresses = (customerId?: number) =>
+  apiRequest<SavedAddress[]>('/api/orders/addresses', { query: { customerId } })
 
-export async function getStatusHistory(id: number): Promise<OrderStatusHistoryEntry[]> {
-  const res = await fetch(`/api/orders/${id}/history`, { headers: getHeaders(id) })
-  return handleResponse<OrderStatusHistoryEntry[]>(res)
-}
-
-export async function getOrderHistory(customerId?: number): Promise<OrderResponse[]> {
-  const url = customerId ? `/api/orders?customerId=${customerId}` : '/api/orders'
-  const res = await fetch(url, {
-    headers: getHeaders(),
-  })
-  return handleResponse<OrderResponse[]>(res)
-}
-
-export async function getOrders(params?: {
-  customerId?: number
-  branchId?: number
-  status?: string
-}): Promise<OrderResponse[]> {
-  const query = new URLSearchParams()
-  if (params?.customerId) query.append('customerId', String(params.customerId))
-  if (params?.branchId) query.append('branchId', String(params.branchId))
-  if (params?.status) query.append('status', params.status)
-
-  const url = query.toString() ? `/api/orders?${query.toString()}` : '/api/orders'
-  const res = await fetch(url, {
-    headers: getHeaders(),
-  })
-  return handleResponse<OrderResponse[]>(res)
-}
-
-export async function updateOrderStatus(id: number, status: OrderStatus, riderId?: number, note?: string): Promise<OrderResponse> {
-  const res = await fetch(`/api/orders/${id}/status`, {
-    method: 'PUT',
-    headers: getHeaders(),
-    body: JSON.stringify({ status, riderId, note }),
-  })
-  return handleResponse<OrderResponse>(res)
-}
-
-export async function getBranchRiders(): Promise<User[]> {
-  const res = await fetch('/api/orders/riders', { headers: getHeaders() })
-  return handleResponse<User[]>(res)
-}
-
-export async function getSavedAddresses(customerId?: number): Promise<SavedAddress[]> {
-  const url = customerId ? `/api/orders/addresses?customerId=${customerId}` : '/api/orders/addresses'
-  const res = await fetch(url, {
-    headers: getHeaders(),
-  })
-  return handleResponse<SavedAddress[]>(res)
-}
-
-export async function saveCustomerAddress(
-  customerId: number,
-  addressLine: string,
-  city?: string
-): Promise<SavedAddress> {
-  const params = new URLSearchParams()
-  params.append('customerId', String(customerId))
-  params.append('addressLine', addressLine)
-  if (city) params.append('city', city)
-
-  const res = await fetch(`/api/orders/addresses?${params.toString()}`, {
-    method: 'POST',
-    headers: getHeaders(),
-  })
-  return handleResponse<SavedAddress>(res)
-}
+export const saveCustomerAddress = (customerId: number, addressLine: string, city?: string) =>
+  apiRequest<SavedAddress>('/api/orders/addresses', { method: 'POST', query: { customerId, addressLine, city } })
 
 export async function claimGuestOrders(orderId: number): Promise<ClaimOrdersResponse> {
-  const res = await fetch(`/api/orders/claim?orderId=${orderId}`, {
+  const result = await apiRequest<ClaimOrdersResponse>('/api/orders/claim', {
     method: 'POST',
-    headers: getHeaders(orderId),
+    orderId,
+    query: { orderId },
   })
-  const result = await handleResponse<ClaimOrdersResponse>(res)
   if (result.claimedCount > 0) sessionStorage.removeItem(guestTokenKey(orderId))
   return result
+}
+
+// ---------------------------------------------------------------- branch side (staff, manager, rider)
+
+export const getOrders = (params?: { customerId?: number; branchId?: number; status?: string }) =>
+  apiRequest<OrderResponse[]>('/api/orders', { query: params })
+
+export const updateOrderStatus = (id: number, status: OrderStatus, riderId?: number, note?: string) =>
+  apiRequest<OrderResponse>(`/api/orders/${id}/status`, { method: 'PUT', body: { status, riderId, note } })
+
+export const acceptOrder = (id: number) => apiRequest<OrderResponse>(`/api/orders/${id}/accept`, { method: 'POST' })
+
+export const rejectOrder = (id: number, reason: string) =>
+  apiRequest<OrderResponse>(`/api/orders/${id}/reject`, { method: 'POST', body: { reason } })
+
+export const approveCancellation = (id: number, note?: string) =>
+  apiRequest<OrderResponse>(`/api/orders/${id}/cancel-request/approve`, { method: 'POST', body: { note } })
+
+export const declineCancellation = (id: number, note?: string) =>
+  apiRequest<OrderResponse>(`/api/orders/${id}/cancel-request/decline`, { method: 'POST', body: { note } })
+
+export const retryRefund = (id: number) => apiRequest<OrderResponse>(`/api/orders/${id}/refund/retry`, { method: 'POST' })
+
+export const collectCod = (id: number, cashCollected: number) =>
+  apiRequest<OrderResponse>(`/api/orders/${id}/cod/collect`, { method: 'POST', body: { cashCollected } })
+
+export const markDeliveryFailed = (id: number, reason: string) =>
+  apiRequest<OrderResponse>(`/api/orders/${id}/delivery-failed`, { method: 'POST', body: { reason } })
+
+export const getBranchRiders = () => apiRequest<RiderAvailability[]>('/api/orders/riders')
+
+export const getRefundQueue = (branchId?: number) =>
+  apiRequest<OrderResponse[]>('/api/orders/refunds', { query: { branchId } })
+
+export const getCancelRequestQueue = (branchId?: number) =>
+  apiRequest<OrderResponse[]>('/api/orders/cancel-requests', { query: { branchId } })
+
+export const getBranchComplaints = (branchId?: number) =>
+  apiRequest<Complaint[]>('/api/orders/complaints', { query: { branchId } })
+
+export const getBranchReviews = (branchId?: number) =>
+  apiRequest<Review[]>('/api/orders/reviews', { query: { branchId } })
+
+export function isPaymentDeclined(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 402
 }

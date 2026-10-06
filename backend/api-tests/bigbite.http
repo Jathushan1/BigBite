@@ -1,0 +1,155 @@
+### BigBite API walkthrough (VS Code "REST Client" or IntelliJ HTTP Client)
+### Start the backend first. Requests run top to bottom; each one stores what the next needs.
+### Demo accounts come from the demo seeder (see backend/.env.example).
+
+@base = http://localhost:8080
+
+### 1. Public branch directory (no login)
+GET {{base}}/api/branches
+
+### 2. Public menu of branch 1, available items only
+# @name menu
+GET {{base}}/api/menu/branch/1?availableOnly=true
+
+### 3. Sign in as each role
+# @name customer
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{"email": "customer@bigbite.lk", "password": "Customer@123"}
+
+###
+# @name staff
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{"email": "staff.cmb03@bigbite.lk", "password": "Staff@123"}
+
+###
+# @name rider
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{"email": "rider.cmb03@bigbite.lk", "password": "Rider@123"}
+
+###
+# @name manager
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{"email": "manager.cmb03@bigbite.lk", "password": "Manager@123"}
+
+###
+# @name admin
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{"email": "admin@bigbite.com", "password": "Admin@123"}
+
+### 4. Customer places a delivery order (two of the first menu item)
+# @name order
+POST {{base}}/api/orders
+Authorization: Bearer {{customer.response.body.token}}
+Content-Type: application/json
+
+{
+  "branchId": 1,
+  "fulfillmentType": "DELIVERY",
+  "deliveryAddress": "12 Flower Road, Colombo 07",
+  "items": [{"menuItemId": {{menu.response.body.$[0].menuId}}, "quantity": 2}]
+}
+
+### 5a. Declined test card -> 402 with attemptsRemaining
+POST {{base}}/api/orders/{{order.response.body.id}}/payment
+Authorization: Bearer {{customer.response.body.token}}
+Idempotency-Key: http-decline-{{$randomInt 1 999999}}
+Content-Type: application/json
+
+{"method": "CREDIT_CARD", "card": {"holderName": "Demo", "number": "4000000000000002", "expMonth": 12, "expYear": 2030, "cvc": "123"}}
+
+### 5b. Approved test card -> PAYMENT_VERIFIED, waiting for staff
+POST {{base}}/api/orders/{{order.response.body.id}}/payment
+Authorization: Bearer {{customer.response.body.token}}
+Idempotency-Key: http-approve-{{$randomInt 1 999999}}
+Content-Type: application/json
+
+{"method": "CREDIT_CARD", "card": {"holderName": "Demo", "number": "4242424242424242", "expMonth": 12, "expYear": 2030, "cvc": "123"}}
+
+### 6. Manager cannot run orders (403 STAFF_REQUIRED)
+POST {{base}}/api/orders/{{order.response.body.id}}/accept
+Authorization: Bearer {{manager.response.body.token}}
+
+### 7. Staff accepts, starts preparing
+POST {{base}}/api/orders/{{order.response.body.id}}/accept
+Authorization: Bearer {{staff.response.body.token}}
+
+###
+PUT {{base}}/api/orders/{{order.response.body.id}}/status
+Authorization: Bearer {{staff.response.body.token}}
+Content-Type: application/json
+
+{"status": "PREPARING"}
+
+### 8. Staff picks a rider and dispatches
+# @name riders
+GET {{base}}/api/orders/riders
+Authorization: Bearer {{staff.response.body.token}}
+
+###
+PUT {{base}}/api/orders/{{order.response.body.id}}/status
+Authorization: Bearer {{staff.response.body.token}}
+Content-Type: application/json
+
+{"status": "OUT_FOR_DELIVERY", "riderId": {{riders.response.body.$[0].riderId}}}
+
+### 9. Customer tracks the rider
+GET {{base}}/api/orders/{{order.response.body.id}}/tracking
+Authorization: Bearer {{customer.response.body.token}}
+
+### 10. Rider delivers and completes
+PUT {{base}}/api/orders/{{order.response.body.id}}/status
+Authorization: Bearer {{rider.response.body.token}}
+Content-Type: application/json
+
+{"status": "DELIVERED"}
+
+###
+PUT {{base}}/api/orders/{{order.response.body.id}}/status
+Authorization: Bearer {{rider.response.body.token}}
+Content-Type: application/json
+
+{"status": "COMPLETED"}
+
+### 11. Customer reviews the order
+POST {{base}}/api/orders/{{order.response.body.id}}/review
+Authorization: Bearer {{customer.response.body.token}}
+Content-Type: application/json
+
+{"rating": 5, "comment": "Hot and on time"}
+
+### 12. The completed order shows up in the branch sales report
+GET {{base}}/api/manager/branch/reports/monthly
+Authorization: Bearer {{manager.response.body.token}}
+
+### 13. Franchise report (Super Admin)
+GET {{base}}/api/admin/branches/reports/monthly?year=2026&month=10
+Authorization: Bearer {{admin.response.body.token}}
+
+### 14. Deleting a branch that is in use -> 409 BRANCH_IN_USE
+DELETE {{base}}/api/admin/branches/1
+Authorization: Bearer {{admin.response.body.token}}
+
+### 15. Forgot password -> same answer for any email; read the link in the mock outbox
+POST {{base}}/api/auth/forgot-password
+Content-Type: application/json
+
+{"email": "customer@bigbite.lk"}
+
+###
+GET {{base}}/api/dev/outbox
+
+### 16. Validation errors use one JSON shape
+POST {{base}}/api/auth/register/customer
+Content-Type: application/json
+
+{"name": "X", "email": "not-an-email", "phoneNumber": "123", "password": "weak"}

@@ -1,474 +1,311 @@
-import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
-import {
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  CreditCard,
-  Banknote,
-  ShieldCheck,
-  ShieldAlert,
-  ArrowLeft,
-  AlertTriangle,
-  Lock,
-  Sparkles,
-} from 'lucide-react'
-import { getOrder, getPaymentOptions, submitPayment, OrderApiError } from '../api/orderApi'
+import { useMemo, useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { AnimatePresence, motion } from 'motion/react'
+import { AlertTriangle, ArrowLeft, Banknote, CreditCard, Lock, ShieldCheck, Sparkles, Wifi } from 'lucide-react'
+import { getOrder, getPaymentOptions, submitPayment } from '../api/orderApi'
+import { ApiError, errorMessage } from '@/lib/http'
+import { useAsync } from '@/hooks/useAsync'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Alert, Field } from '@/components/forms'
+import { PageLoader } from '@/components/ProtectedRoute'
 import { toast } from '@/components/ui/sonner'
 import { cn } from '@/lib/utils'
-import type { OrderResponse, PaymentMethod, PaymentOptions } from '../types/order'
+import { formatLKR } from '@/lib/format'
+import { TEST_CARDS, cardBrand, formatCardNumber, passesLuhn } from '@/lib/card'
+import type { PaymentDeclined, PaymentMethod } from '../types/order'
+
+function CardPreview({ number, name, expiry, cvc, flipped }: { number: string; name: string; expiry: string; cvc: string; flipped: boolean }) {
+  const brand = cardBrand(number)
+  const shown = (number + ' ').padEnd(19, '•').slice(0, 19)
+  return (
+    <div className="[perspective:1200px] mx-auto w-full max-w-sm">
+      <motion.div
+        animate={{ rotateY: flipped ? 180 : 0 }}
+        transition={{ type: 'spring', stiffness: 140, damping: 18 }}
+        className="relative aspect-[1.586] w-full [transform-style:preserve-3d]"
+      >
+        <div className="absolute inset-0 rounded-3xl bg-brand-gradient p-6 text-white shadow-2xl glow-primary [backface-visibility:hidden] overflow-hidden">
+          <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/15" />
+          <div className="absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-black/10" />
+          <div className="relative flex h-full flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <div className="h-9 w-12 rounded-md bg-gradient-to-br from-yellow-200 to-yellow-500 opacity-90" />
+              <Wifi className="h-6 w-6 rotate-90 opacity-80" />
+            </div>
+            <p className="font-mono text-xl tracking-[0.12em] sm:text-2xl">{shown}</p>
+            <div className="flex items-end justify-between text-xs uppercase">
+              <div>
+                <p className="opacity-70">Card holder</p>
+                <p className="text-sm font-bold tracking-wide">{name || 'YOUR NAME'}</p>
+              </div>
+              <div>
+                <p className="opacity-70">Expires</p>
+                <p className="text-sm font-bold">{expiry || 'MM/YY'}</p>
+              </div>
+              <p className="text-lg font-black italic">{brand === 'CARD' ? '' : brand}</p>
+            </div>
+          </div>
+        </div>
+        <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-zinc-800 to-zinc-950 text-white shadow-2xl [backface-visibility:hidden] [transform:rotateY(180deg)] overflow-hidden">
+          <div className="mt-6 h-11 w-full bg-black" />
+          <div className="mx-6 mt-5 flex items-center justify-end rounded-md bg-white/90 px-3 py-2 font-mono text-sm text-black">{cvc || '•••'}</div>
+          <p className="mx-6 mt-3 text-[10px] opacity-60">Security code — never stored by BigBite</p>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
 
 export function PaymentPage() {
   const { orderId } = useParams<{ orderId: string }>()
-  const numericOrderId = Number(orderId)
+  const id = Number(orderId)
   const navigate = useNavigate()
+  const { data, loading, error: loadError } = useAsync(() => Promise.all([getOrder(id), getPaymentOptions(id)]), [id])
+  const [order, options] = data ?? []
 
-  const [order, setOrder] = useState<OrderResponse | null>(null)
-  const [paymentOptions, setPaymentOptions] = useState<PaymentOptions | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [method, setMethod] = useState<PaymentMethod>('CREDIT_CARD')
+  const [number, setNumber] = useState('')
+  const [name, setName] = useState('')
+  const [expiry, setExpiry] = useState('')
+  const [cvc, setCvc] = useState('')
+  const [cvcFocused, setCvcFocused] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [paymentFailedNotice, setPaymentFailedNotice] = useState(false)
+  const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null)
+  const [shake, setShake] = useState(0)
+  const attemptKey = useRef(crypto.randomUUID())
 
-  // Payment method selection
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('CREDIT_CARD')
-
-  // Stripe sandbox card inputs
-  const [cardNumber, setCardNumber] = useState('4242 4242 4242 4242')
-  const [cardExpiry, setCardExpiry] = useState('12/28')
-  const [cardCvc, setCardCvc] = useState('123')
-  const [cardName, setCardName] = useState('')
-  const [simulateFailure, setSimulateFailure] = useState(false)
-  const paymentAttemptKey = useRef<string>(crypto.randomUUID())
-
-  useEffect(() => {
-    async function loadOrder() {
-      try {
-        setLoading(true)
-        const [data, options] = await Promise.all([
-          getOrder(numericOrderId), getPaymentOptions(numericOrderId),
-        ])
-        setOrder(data)
-        setPaymentOptions(options)
-
-        if (options.codEligible) {
-          setSelectedMethod('CASH_ON_DELIVERY')
-        } else {
-          setSelectedMethod('CREDIT_CARD')
-        }
-
-        if (data.contactName) {
-          setCardName(data.contactName)
-        }
-      } catch (err: any) {
-        setError(err.message || 'Failed to retrieve order details')
-      } finally {
-        setLoading(false)
-      }
+  const isCard = method !== 'CASH_ON_DELIVERY'
+  const brand = cardBrand(number)
+  const cardProblems = useMemo(() => {
+    const problems: Record<string, string> = {}
+    const digits = number.replace(/\D/g, '')
+    if (digits.length > 0 && !passesLuhn(digits)) problems.number = 'Card number is not valid'
+    const match = expiry.match(/^(\d{2})\/(\d{2})$/)
+    if (expiry && !match) problems.expiry = 'Use MM/YY'
+    if (match) {
+      const month = Number(match[1])
+      const year = 2000 + Number(match[2])
+      const now = new Date()
+      if (month < 1 || month > 12) problems.expiry = 'Invalid month'
+      else if (year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1)) problems.expiry = 'Card has expired'
     }
-    if (numericOrderId) {
-      loadOrder()
-    }
-  }, [numericOrderId])
+    const cvcLength = brand === 'AMEX' ? 4 : 3
+    if (cvc && cvc.length !== cvcLength) problems.cvc = `${cvcLength} digits`
+    return problems
+  }, [number, expiry, cvc, brand])
+  const cardReady = isCard && passesLuhn(number) && /^\d{2}\/\d{2}$/.test(expiry) && cvc.length >= 3 && name.trim().length > 1 && Object.keys(cardProblems).length === 0
 
-  const handleConfirmCod = async () => {
-    if (!order) return
-    if (!paymentOptions?.codEligible) {
-      setError(paymentOptions?.codMessage || 'Cash payment is unavailable for this order.')
-      toast.error(paymentOptions?.codMessage || 'Cash payment is unavailable.')
-      return
-    }
-
-    try {
-      setSubmitting(true)
-      setError(null)
-      setPaymentFailedNotice(false)
-
-      const updated = await submitPayment(numericOrderId, {
-        paymentMethod: 'CASH_ON_DELIVERY',
-        success: true,
-      }, paymentAttemptKey.current)
-      setOrder(updated)
-      toast.success('Cash payment selected. Your order is confirmed!')
-      navigate(`/order/${numericOrderId}`)
-    } catch (err: any) {
-      const msg = err.message || 'Failed to confirm Cash on Delivery'
-      setError(msg)
-      toast.error(msg)
-    } finally {
-      setSubmitting(false)
-    }
+  if (loading) return <PageLoader label="Preparing secure checkout…" />
+  if (loadError || !order || !options) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-20 space-y-4 text-center">
+        <Alert>{loadError ?? 'Order not found'}</Alert>
+        <Link to="/"><Button><ArrowLeft className="h-4 w-4" /> Home</Button></Link>
+      </div>
+    )
   }
 
-  const handleStripeCardPayment = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!order) return
+  if (order.status !== 'PLACED' || order.paymentMethod === 'CASH_ON_DELIVERY') {
+    return (
+      <div className="max-w-md mx-auto px-4 py-20 text-center space-y-4">
+        <ShieldCheck className="mx-auto h-12 w-12 text-success" />
+        <h1 className="text-xl font-black">Payment step complete</h1>
+        <p className="text-muted-foreground">This order is already {order.status.replaceAll('_', ' ').toLowerCase()}.</p>
+        <Link to={`/order/${id}`}><Button variant="glow">Track order</Button></Link>
+      </div>
+    )
+  }
 
+  const pay = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    setError(null)
+    setSubmitting(true)
     try {
-      setSubmitting(true)
-      setError(null)
-      setPaymentFailedNotice(false)
-
-      const updated = await submitPayment(numericOrderId, {
-        paymentMethod: selectedMethod,
-        success: !simulateFailure,
-      }, paymentAttemptKey.current)
-
-      setOrder(updated)
-
-      if (!simulateFailure) {
-        toast.success('Card payment verified successfully!')
-        navigate(`/order/${numericOrderId}`)
+      if (method === 'CASH_ON_DELIVERY') {
+        await submitPayment(id, { method }, attemptKey.current)
+        toast.success('Cash on delivery selected', { description: 'The branch will accept your order shortly.' })
       } else {
-        toast.error('Card payment failed / declined.')
-        setPaymentFailedNotice(true)
+        const [mm, yy] = expiry.split('/')
+        await submitPayment(id, {
+          method,
+          card: { holderName: name.trim(), number: number.replace(/\D/g, ''), expMonth: Number(mm), expYear: 2000 + Number(yy), cvc },
+        }, attemptKey.current)
+        toast.success('Payment approved', { description: `${brand} ending ${number.replace(/\D/g, '').slice(-4)}` })
       }
-    } catch (err: any) {
-      const msg = err.message || 'Card payment failed'
-      if (err instanceof OrderApiError && err.status === 402) {
-        paymentAttemptKey.current = crypto.randomUUID()
-        setPaymentFailedNotice(true)
-        if (err.code === 'PAYMENT_FAILED') {
-          toast.error('The order was cancelled after three declined attempts.')
-          navigate(`/order/${numericOrderId}`)
+      navigate(`/order/${id}`)
+    } catch (err) {
+      attemptKey.current = crypto.randomUUID()
+      if (err instanceof ApiError && err.status === 402) {
+        const body = err.body as PaymentDeclined
+        setAttemptsLeft(body.attemptsRemaining)
+        setShake((s) => s + 1)
+        if (body.error === 'PAYMENT_FAILED') {
+          toast.error('Order cancelled after repeated declines')
+          navigate(`/order/${id}`)
           return
         }
       }
-      setError(msg)
-      toast.error(msg)
+      setError(errorMessage(err, 'Payment failed'))
     } finally {
       setSubmitting(false)
     }
   }
 
-  if (loading) {
-    return (
-      <div className="max-w-md mx-auto px-4 py-24 text-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
-        <p className="text-muted-foreground text-sm font-medium">Preparing payment checkout...</p>
-      </div>
-    )
-  }
-
-  if (error && !order) {
-    return (
-      <div className="max-w-md mx-auto px-4 py-20 text-center">
-        <div className="p-5 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive mb-6">
-          <p className="font-bold">Error loading order</p>
-          <p className="text-sm mt-1">{error}</p>
-        </div>
-        <Link to="/">
-          <Button className="gap-2">
-            <ArrowLeft className="w-4 h-4" /> Go to Home
-          </Button>
-        </Link>
-      </div>
-    )
-  }
-
-  if (order && order.status !== 'PLACED') {
-    return (
-      <div className="max-w-md mx-auto px-4 py-20 text-center space-y-4">
-        <h1 className="text-xl font-black">Payment step closed</h1>
-        <p className="text-muted-foreground">This order is now {order.status.replaceAll('_', ' ').toLowerCase()}.</p>
-        <Link to={`/order/${numericOrderId}`}><Button>View order</Button></Link>
-      </div>
-    )
-  }
-
-  const isCodAllowed = paymentOptions?.codEligible ?? false
-  const isCardMethod = selectedMethod === 'CREDIT_CARD' || selectedMethod === 'DEBIT_CARD' || selectedMethod === 'CARD_STRIPE'
+  const methods: { value: PaymentMethod; label: string; icon: typeof CreditCard; disabled?: boolean; note?: string }[] = [
+    { value: 'CREDIT_CARD', label: 'Credit card', icon: CreditCard },
+    { value: 'DEBIT_CARD', label: 'Debit card', icon: CreditCard },
+    { value: 'CASH_ON_DELIVERY', label: 'Cash', icon: Banknote, disabled: !options.codEligible, note: options.codEligible ? undefined : options.codMessage ?? undefined },
+  ]
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-      {/* Breadcrumb / Back Link */}
-      <Link
-        to={`/order/${numericOrderId}`}
-        className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-primary transition-colors mb-4 cursor-pointer"
-      >
-        <ArrowLeft className="w-4 h-4" /> Back to Order Tracking
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      <Link to={`/order/${id}`} className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-primary mb-4">
+        <ArrowLeft className="w-4 h-4" /> Back to order
       </Link>
-
-      <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-6 border-b border-border">
+      <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
+        <motion.section
+          key={shake}
+          animate={shake ? { x: [0, -10, 10, -6, 6, 0] } : {}}
+          transition={{ duration: 0.4 }}
+          className="rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-xl space-y-6"
+        >
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-primary">
-              Step 2 of 2 • Secure Payment
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-black text-foreground tracking-tight mt-1">
-              Select Payment Method
-            </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-              Confirm payment for Order #{order?.id}
-            </p>
+            <p className="text-xs font-bold uppercase tracking-wider text-primary">Step 3 of 3 · Secure payment</p>
+            <h1 className="mt-1 text-2xl sm:text-3xl font-black">Pay for order #{order.id}</h1>
           </div>
 
-          <div className="sm:text-right">
-            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
-              Total Amount
-            </span>
-            <span className="text-2xl sm:text-3xl font-black text-primary">
-              Rs. {order?.grandTotal?.toFixed(2)}
-            </span>
-          </div>
-        </div>
-
-        {/* Global Error Banner */}
-        {error && (
-          <div className="p-4 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-bold flex items-start gap-2.5">
-            <ShieldAlert className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* Payment Failed Notice (Retry Banner) */}
-        {paymentFailedNotice && (
-          <div className="p-4 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
-            <XCircle className="w-5 h-5 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold text-sm">Payment Failed / Declined</p>
-              <p className="mt-0.5 text-destructive/90">
-                The card transaction was simulated as declined. You can retry payment below without placing a new order.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Large Tap Cards for Payment Method Picker (§3, §6) */}
-        <div className="space-y-3">
-          <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider">
-            Choose Payment Method
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Card Option: Cash on Delivery */}
-            <div
-              onClick={() => {
-                if (isCodAllowed) setSelectedMethod('CASH_ON_DELIVERY')
-              }}
-              className={cn(
-                'rounded-2xl p-5 border-2 transition relative flex flex-col justify-between min-h-[140px]',
-                !isCodAllowed
-                  ? 'border-border bg-muted/40 opacity-60 cursor-not-allowed'
-                  : selectedMethod === 'CASH_ON_DELIVERY'
-                  ? 'border-primary bg-primary/10 shadow-sm cursor-pointer ring-2 ring-primary/20'
-                  : 'border-border hover:border-muted-foreground/30 bg-card cursor-pointer'
-              )}
-            >
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
-                    <Banknote className="w-5 h-5" />
-                  </div>
-                  {selectedMethod === 'CASH_ON_DELIVERY' && isCodAllowed && (
-                    <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                      <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />
-                    </span>
-                  )}
-                </div>
-                <h3 className="text-base font-black text-foreground">{order?.fulfillmentType === 'TAKEAWAY' ? 'Pay at Counter' : 'Cash on Delivery (COD)'}</h3>
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Pay upon handover. Your order is confirmed when you select cash.
-                </p>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-border">
-                {isCodAllowed ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
-                    <CheckCircle2 className="w-3 h-3" /> Cash payment available
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-destructive bg-destructive/10 px-2 py-0.5 rounded-md">
-                    <AlertTriangle className="w-3 h-3" /> {paymentOptions?.codMessage || 'Cash unavailable'}
-                  </span>
+          <div className="grid grid-cols-3 gap-2">
+            {methods.map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                disabled={m.disabled}
+                onClick={() => setMethod(m.value)}
+                title={m.note}
+                className={cn(
+                  'relative flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-xs font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50',
+                  method === m.value ? 'border-primary bg-primary/5 text-primary' : 'border-border text-muted-foreground hover:border-primary/40'
                 )}
-              </div>
-            </div>
-
-            {/* Simulated card payment */}
-            <div
-              onClick={() => setSelectedMethod('CREDIT_CARD')}
-              className={cn(
-                'rounded-2xl p-5 border-2 transition relative flex flex-col justify-between min-h-[140px] cursor-pointer',
-                isCardMethod
-                  ? 'border-primary bg-primary/10 shadow-sm ring-2 ring-primary/20'
-                  : 'border-border hover:border-muted-foreground/30 bg-card'
-              )}
-            >
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
-                    <CreditCard className="w-5 h-5 stroke-[2.2]" />
-                  </div>
-                  {isCardMethod && (
-                    <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                      <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />
-                    </span>
-                  )}
-                </div>
-                <h3 className="text-base font-black text-foreground">Credit / Debit Card</h3>
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Simulated card authorization for this demo.
-                </p>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-border flex items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
-                  <ShieldCheck className="w-3 h-3" /> Mock payment gateway
-                </span>
-              </div>
-            </div>
+              >
+                {method === m.value && <motion.span layoutId="pay-method" className="absolute inset-0 rounded-2xl ring-2 ring-primary" />}
+                <m.icon className="h-5 w-5" />
+                {m.label}
+              </button>
+            ))}
           </div>
-        </div>
+          {!options.codEligible && options.codMessage && (
+            <p className="-mt-3 text-xs text-muted-foreground">Cash unavailable: {options.codMessage}</p>
+          )}
 
-        {/* Tab 1 Body: Cash on Delivery Confirmation */}
-        {selectedMethod === 'CASH_ON_DELIVERY' && (
-          <div className="bg-secondary/70 border border-border rounded-2xl p-6 space-y-4 animate-in fade-in duration-150">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
-                <Banknote className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-foreground">Pay on Handover</h4>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Please keep <strong>Rs. {order?.grandTotal?.toFixed(2)}</strong> ready. Staff will record cash and any change when your order is handed over.
-                </p>
-              </div>
-            </div>
+          {error && (
+            <Alert className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                <span className="font-bold">{error}</span>
+                {attemptsLeft !== null && attemptsLeft > 0 && (
+                  <span className="block text-xs opacity-80">The order is cancelled after {attemptsLeft} more declined attempt(s).</span>
+                )}
+              </span>
+            </Alert>
+          )}
 
-            <Button
-              type="button"
-              disabled={submitting || !isCodAllowed}
-              onClick={handleConfirmCod}
-              className="w-full h-12 text-sm font-bold shadow-lg shadow-primary/20 gap-2"
-            >
-              {submitting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
-              )}
-              <span>Confirm Order with Cash on Delivery (Rs. {order?.grandTotal?.toFixed(2)})</span>
-            </Button>
-          </div>
-        )}
-
-        {/* Tab 2 Body: mock card gateway */}
-        {isCardMethod && (
-          <form onSubmit={handleStripeCardPayment} className="space-y-4 animate-in fade-in duration-150">
-            <div className="flex gap-2">
-              <Button type="button" variant={selectedMethod === 'CREDIT_CARD' ? 'default' : 'outline'} onClick={() => setSelectedMethod('CREDIT_CARD')}>Credit card</Button>
-              <Button type="button" variant={selectedMethod === 'DEBIT_CARD' ? 'default' : 'outline'} onClick={() => setSelectedMethod('DEBIT_CARD')}>Debit card</Button>
-            </div>
-            <div className="bg-secondary/70 border border-border rounded-2xl p-5 space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-border">
-                <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-                  <Lock className="w-3.5 h-3.5 text-primary" />
-                  <span>Mock card payment</span>
+          <AnimatePresence mode="wait">
+            {isCard ? (
+              <motion.form key="card" onSubmit={pay} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-4">
+                <CardPreview number={number} name={name} expiry={expiry} cvc={cvc} flipped={cvcFocused} />
+                <Field label="Card number" error={cardProblems.number}>
+                  <Input inputMode="numeric" autoComplete="cc-number" placeholder="4242 4242 4242 4242" value={number}
+                    onChange={(e) => setNumber(formatCardNumber(e.target.value))} className="font-mono tracking-wider" />
+                </Field>
+                <Field label="Name on card">
+                  <Input autoComplete="cc-name" value={name} onChange={(e) => setName(e.target.value.toUpperCase())} placeholder="KASUN PERERA" />
+                </Field>
+                <div className="grid grid-cols-2 gap-4">
+                  <Field label="Expiry" error={cardProblems.expiry}>
+                    <Input inputMode="numeric" autoComplete="cc-exp" placeholder="MM/YY" value={expiry}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, '').slice(0, 4)
+                        setExpiry(digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits)
+                      }} />
+                  </Field>
+                  <Field label="CVC" error={cardProblems.cvc}>
+                    <Input inputMode="numeric" autoComplete="cc-csc" placeholder="123" value={cvc}
+                      onFocus={() => setCvcFocused(true)} onBlur={() => setCvcFocused(false)}
+                      onChange={(e) => setCvc(e.target.value.replace(/\D/g, '').slice(0, 4))} />
+                  </Field>
                 </div>
+                <Button type="submit" variant="glow" size="lg" className="w-full" loading={submitting} disabled={!cardReady}>
+                  {!submitting && <Lock className="h-4 w-4" />} Pay {formatLKR(order.grandTotal)}
+                </Button>
+              </motion.form>
+            ) : (
+              <motion.div key="cod" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-4">
+                <div className="rounded-2xl border border-dashed border-success/40 bg-success/5 p-5 text-sm">
+                  <p className="font-bold text-foreground">Pay {formatLKR(order.grandTotal)} in cash</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {order.fulfillmentType === 'DELIVERY' ? 'Hand the cash to your rider. They carry change.' : 'Pay at the counter when you collect.'}
+                    {' '}The branch confirms your order before cooking starts.
+                  </p>
+                </div>
+                <Button variant="glow" size="lg" className="w-full" loading={submitting} onClick={() => pay()}>
+                  {!submitting && <Banknote className="h-4 w-4" />} Confirm cash on delivery
+                </Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+            <ShieldCheck className="h-3.5 w-3.5 text-success" /> Card details go straight to the payment gateway. Only the last 4 digits are kept.
+          </p>
+        </motion.section>
+
+        <aside className="space-y-6">
+          <section className="rounded-3xl border border-border bg-card p-6 shadow-sm space-y-3">
+            <h2 className="text-sm font-black uppercase tracking-wider text-muted-foreground">Order summary</h2>
+            {order.items.map((item) => (
+              <div key={item.id} className="flex justify-between text-sm">
+                <span>{item.quantity} × {item.itemNameSnapshot}</span>
+                <span className="font-semibold">{formatLKR(item.lineTotal)}</span>
+              </div>
+            ))}
+            <div className="space-y-1.5 border-t border-border pt-3 text-sm text-muted-foreground">
+              <div className="flex justify-between"><span>Subtotal</span><span>{formatLKR(order.subtotal)}</span></div>
+              <div className="flex justify-between"><span>Delivery</span><span>{formatLKR(order.deliveryFee)}</span></div>
+              <div className="flex justify-between"><span>Tax</span><span>{formatLKR(order.taxAmount)}</span></div>
+              {order.discountAmount > 0 && (
+                <div className="flex justify-between text-success"><span>Discount ({order.promoCode})</span><span>−{formatLKR(order.discountAmount)}</span></div>
+              )}
+            </div>
+            <div className="flex justify-between border-t border-border pt-3 text-lg font-black">
+              <span>Total</span><span className="text-primary">{formatLKR(order.grandTotal)}</span>
+            </div>
+          </section>
+
+          {isCard && (
+            <section className="rounded-3xl border border-dashed border-border p-5 space-y-3">
+              <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                <Sparkles className="h-3.5 w-3.5 text-primary" /> Test cards (any future expiry, any CVC)
+              </p>
+              {TEST_CARDS.map((card) => (
                 <button
+                  key={card.number}
                   type="button"
                   onClick={() => {
-                    setCardNumber('4242 4242 4242 4242')
-                    setCardExpiry('12/28')
-                    setCardCvc('123')
+                    setNumber(card.number)
+                    if (!expiry) setExpiry('12/30')
+                    if (!cvc) setCvc('123')
+                    if (!name) setName((order.contactName ?? 'TEST CUSTOMER').toUpperCase())
                   }}
-                  className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                  className="flex w-full items-center justify-between rounded-xl bg-secondary/60 px-3 py-2 text-left hover:bg-secondary cursor-pointer"
                 >
-                  <Sparkles className="w-3 h-3" /> Auto-fill Test Card
+                  <span className="font-mono text-xs">{card.number}</span>
+                  <span className={cn('text-xs font-bold', card.tone === 'success' ? 'text-success' : 'text-destructive')}>{card.result}</span>
                 </button>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                  Cardholder Name
-                </label>
-                <Input
-                  type="text"
-                  required
-                  value={cardName}
-                  onChange={(e) => setCardName(e.target.value)}
-                  placeholder="e.g. Alice Johnson"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                  Card Number
-                </label>
-                <div className="relative">
-                  <Input
-                    type="text"
-                    required
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value)}
-                    placeholder="4242 4242 4242 4242"
-                    className="font-mono pr-10"
-                  />
-                  <CreditCard className="w-4 h-4 text-muted-foreground absolute right-3.5 top-3.5" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Expiry (MM/YY)
-                  </label>
-                  <Input
-                    type="text"
-                    required
-                    value={cardExpiry}
-                    onChange={(e) => setCardExpiry(e.target.value)}
-                    placeholder="MM/YY"
-                    className="font-mono"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    CVC / CVV
-                  </label>
-                  <Input
-                    type="text"
-                    required
-                    maxLength={4}
-                    value={cardCvc}
-                    onChange={(e) => setCardCvc(e.target.value)}
-                    placeholder="123"
-                    className="font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Simulation failure toggle */}
-              <div className="pt-2 border-t border-border flex items-center justify-between">
-                <span className="text-[11px] text-muted-foreground">Sandbox Simulation Mode:</span>
-                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={simulateFailure}
-                    onChange={(e) => setSimulateFailure(e.target.checked)}
-                    className="rounded border-input text-primary accent-primary focus:ring-ring"
-                  />
-                  <span>Simulate Decline</span>
-                </label>
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              disabled={submitting}
-              className="w-full h-12 text-sm font-bold shadow-lg shadow-primary/20 gap-2"
-            >
-              {submitting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Lock className="w-4 h-4" />
-              )}
-              <span>Simulate Rs. {order?.grandTotal?.toFixed(2)} card payment</span>
-            </Button>
-          </form>
-        )}
+              ))}
+            </section>
+          )}
+        </aside>
       </div>
     </div>
   )

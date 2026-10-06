@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import type { Role, User } from '../types/auth'
 import { getMeApi, loginApi } from '../services/api'
+import { getRoleLandingPath } from '@/lib/navigation'
+
+export { getRoleLandingPath }
 
 interface AuthContextType {
   user: User | null
@@ -8,25 +11,11 @@ interface AuthContextType {
   isLoading: boolean
   login: (email: string, pass: string) => Promise<Role>
   logout: () => void
+  refreshUser: () => Promise<void>
   getRoleLandingPath: (role: Role) => string
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
-
-export function getRoleLandingPath(role: Role): string {
-  switch (role) {
-    case 'SUPER_ADMIN':
-      return '/admin'
-    case 'BRANCH_MANAGER':
-      return '/branch-manager/dashboard'
-    case 'DELIVERY_PARTNER':
-      return '/delivery/dashboard'
-    case 'CUSTOMER':
-      return '/customer/profile'
-    default:
-      return '/'
-  }
-}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
@@ -79,6 +68,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return res.role
   }
 
+  const refreshUser = async () => {
+    try {
+      setUser(await getMeApi())
+    } catch {
+      // keep the current user; the next protected call will surface the problem
+    }
+  }
+
   const logout = () => {
     localStorage.removeItem('token')
     setToken(null)
@@ -86,7 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout, getRoleLandingPath }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout, refreshUser, getRoleLandingPath }}>
       {children}
     </AuthContext.Provider>
   )

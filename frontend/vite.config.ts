@@ -11,6 +11,10 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, './src'),
     },
   },
+  build: {
+    // The shared chunk holds React, the router and the animation library; role pages are split out.
+    chunkSizeWarningLimit: 650,
+  },
   server: {
     port: 3000,
     proxy: {

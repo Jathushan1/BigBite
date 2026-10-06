@@ -1,495 +1,271 @@
-import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { AnimatePresence, motion } from 'motion/react'
 import {
-  Loader2,
-  RefreshCw,
-  Ban,
-  Receipt,
-  CreditCard,
-  MapPin,
-  ArrowLeft,
-  AlertCircle,
-  Phone,
-  User,
-  Store,
-  Sparkles,
-  Plus,
-  Minus,
-  Banknote,
-  CheckCircle2,
+  AlertCircle, ArrowLeft, Ban, CheckCircle2, ChefHat, Clock, CreditCard, History, Link2, MapPin, Minus, Phone,
+  Plus, Receipt, RefreshCw, Store, Undo2,
 } from 'lucide-react'
-import { getOrder, getOrderBill, getStatusHistory, cancelOrder, updateOrderItem, claimGuestOrders } from '../api/orderApi'
-import type { OrderStatusHistoryEntry } from '../api/orderApi'
-import type { OrderResponse, BillResponse } from '../types/order'
+import {
+  cancelOrder, claimGuestOrders, getOrder, getOrderBill, getStatusHistory, getTracking, requestCancellation, updateOrderItem,
+} from '../api/orderApi'
+import { useAsync, usePolling } from '@/hooks/useAsync'
+import { useAuth } from '../context/AuthContext'
 import { StatusStepper } from '../components/StatusStepper'
 import { StatusBadge } from '../components/StatusBadge'
+import { DeliveryTracker } from '@/components/order/DeliveryTracker'
+import { OrderFeedback } from '@/components/order/OrderFeedback'
+import { PageLoader } from '@/components/ProtectedRoute'
+import { Alert, Textarea } from '@/components/forms'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/sonner'
-import { useAuth } from '../context/AuthContext'
+import { errorMessage } from '@/lib/http'
+import { formatDateTime, formatLKR, humanize, timeAgo } from '@/lib/format'
+
+const TERMINAL = ['COMPLETED', 'CANCELLED', 'DELIVERY_FAILED']
 
 export function OrderStatusPage() {
   const { orderId } = useParams<{ orderId: string }>()
-  const numericOrderId = Number(orderId)
+  const id = Number(orderId)
   const { user } = useAuth()
+  const { data, error, loading, reload } = useAsync(
+    async () => {
+      const [order, bill, history] = await Promise.all([getOrder(id), getOrderBill(id), getStatusHistory(id)])
+      const tracking = order.dispatchedAt ? await getTracking(id).catch(() => undefined) : undefined
+      return { order, bill, history, tracking }
+    },
+    [id]
+  )
+  const order = data?.order
+  usePolling(reload, 4000, !!order && !TERMINAL.includes(order.status))
 
-  const [order, setOrder] = useState<OrderResponse | null>(null)
-  const [bill, setBill] = useState<BillResponse | null>(null)
-  const [history, setHistory] = useState<OrderStatusHistoryEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [actionLoading, setActionLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
-  const [claiming, setClaiming] = useState(false)
-  const [editingItemId, setEditingItemId] = useState<number | null>(null)
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [requestOpen, setRequestOpen] = useState(false)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
 
-  const fetchData = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const [orderData, billData, historyData] = await Promise.all([
-        getOrder(numericOrderId),
-        getOrderBill(numericOrderId),
-        getStatusHistory(numericOrderId),
-      ])
-      setOrder(orderData)
-      setBill(billData)
-      setHistory(historyData)
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch order details')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchSilent = async () => {
-    try {
-      const [orderData, billData, historyData] = await Promise.all([
-        getOrder(numericOrderId),
-        getOrderBill(numericOrderId),
-        getStatusHistory(numericOrderId),
-      ])
-      setOrder(orderData)
-      setBill(billData)
-      setHistory(historyData)
-    } catch {
-      // background poll silently ignores network blips
-    }
-  }
-
-  useEffect(() => {
-    if (!numericOrderId) return
-    fetchData()
-
-    // Real-time polling every 3s
-    const interval = setInterval(() => {
-      fetchSilent()
-    }, 3000)
-
-    return () => clearInterval(interval)
-  }, [numericOrderId])
-
-  const handleCancelOrder = async () => {
-    try {
-      setActionLoading(true)
-      setError(null)
-      const updated = await cancelOrder(numericOrderId)
-      setOrder(updated)
-      toast.success('Order has been cancelled.')
-      const billData = await getOrderBill(numericOrderId)
-      setBill(billData)
-      setCancelDialogOpen(false)
-    } catch (err: any) {
-      const msg = err.message || 'Failed to cancel order'
-      setError(msg)
-      toast.error(msg)
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  const handleUpdateItemQuantity = async (itemId: number, newQty: number) => {
-    if (newQty < 1) return
-    try {
-      setEditingItemId(itemId)
-      const updated = await updateOrderItem(numericOrderId, itemId, newQty)
-      setOrder(updated)
-      const billData = await getOrderBill(numericOrderId)
-      setBill(billData)
-      toast.success('Item quantity updated.')
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to update item quantity.')
-    } finally {
-      setEditingItemId(null)
-    }
-  }
-
-  const handleClaimGuestOrder = async () => {
-    try {
-      setClaiming(true)
-      const res = await claimGuestOrders(numericOrderId)
-      toast.success(res.message || 'Guest order claimed successfully!')
-      fetchData()
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to claim guest order.')
-    } finally {
-      setClaiming(false)
-    }
-  }
-
-  if (loading && !order) {
+  if (loading && !data) return <PageLoader label="Fetching your order…" />
+  if (error && !data) {
     return (
-      <div className="max-w-xl mx-auto px-4 py-24 text-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
-        <p className="text-muted-foreground text-sm font-medium">Loading order #{numericOrderId}...</p>
+      <div className="max-w-md mx-auto px-4 py-20 space-y-4 text-center">
+        <Alert>{error}</Alert>
+        <Link to="/"><Button><ArrowLeft className="h-4 w-4" /> Home</Button></Link>
       </div>
     )
   }
+  if (!data || !order) return null
+  const { bill, history, tracking } = data
 
-  if (error && !order) {
-    return (
-      <div className="max-w-md mx-auto px-4 py-20 text-center">
-        <div className="p-5 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive mb-6">
-          <p className="font-bold">Error loading order</p>
-          <p className="text-sm mt-1">{error}</p>
-        </div>
-        <Link to="/">
-          <Button className="gap-2">
-            <ArrowLeft className="w-4 h-4" /> Go to Home
-          </Button>
-        </Link>
-      </div>
-    )
+  const isOwner = !user || (user.role === 'CUSTOMER' && user.id === order.customerId) || (!order.customerId && user.role === 'CUSTOMER')
+  const needsPayment = order.status === 'PLACED' && !order.paymentMethod
+  const canCancelNow = isOwner && (order.status === 'PLACED' || order.status === 'PAYMENT_VERIFIED')
+  const canRequestCancel = isOwner && ['CONFIRMED', 'PREPARING'].includes(order.status) && !order.cancelRequestStatus
+  const canEditItems = isOwner && needsPayment
+  const canClaim = user?.role === 'CUSTOMER' && !order.customerId
+
+  const act = async (fn: () => Promise<unknown>, success: string) => {
+    setBusy(true)
+    try {
+      await fn()
+      toast.success(success)
+      await reload()
+    } catch (err) {
+      toast.error(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
   }
-
-  const isCancellable = order && ['PLACED', 'PAYMENT_VERIFIED', 'CONFIRMED'].includes(order.status)
-  const isPreparingOrLater =
-    order &&
-    ['PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'].includes(
-      order.status
-    )
-  const isItemEditEligible = order && order.status === 'PLACED' && !order.paymentMethod
-  // Guest claiming prompt: logged in user + order does not belong to user account yet
-  const canClaimGuestOrder = user && user.role === 'CUSTOMER' && order && order.customerId === null
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Cancel Order Confirmation Dialog */}
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-6">
       <ConfirmDialog
-        open={cancelDialogOpen}
-        onOpenChange={setCancelDialogOpen}
-        title="Cancel Order?"
-        description="Are you sure you want to cancel this order? If you have already paid, a refund will be processed back to your original payment method."
-        confirmText="Yes, Cancel Order"
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        title="Cancel this order?"
+        description={order.paymentStatus === 'VERIFIED' ? 'Your card payment will be refunded automatically.' : 'Nothing has been charged yet.'}
+        confirmText="Cancel order"
         variant="destructive"
-        isLoading={actionLoading}
-        onConfirm={handleCancelOrder}
+        isLoading={busy}
+        onConfirm={() => act(() => cancelOrder(id), 'Order cancelled').then(() => setCancelOpen(false))}
       />
-
-      {/* Header & Quick Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <Link to="/orders" className="hover:text-primary flex items-center gap-1 font-bold transition-colors">
-              <ArrowLeft className="w-3.5 h-3.5" /> Order History
-            </Link>
-            <span>•</span>
-            <span>
-              Placed{' '}
-              {order?.createdAt
-                ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                : ''}
-            </span>
-          </div>
-          <h1 className="text-3xl font-black text-foreground tracking-tight flex items-center gap-3">
-            <span>Order #{order?.id}</span>
-            <StatusBadge status={order?.status || 'PLACED'} />
-          </h1>
-        </div>
-
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={fetchData}
-            disabled={loading}
-            className="gap-1.5"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </Button>
-
-          {order?.status === 'PLACED' && ['PENDING', 'FAILED'].includes(order.paymentStatus) && (
-            <Link to={`/order/${order.id}/payment`}>
-              <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
-                <CreditCard className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Complete Payment</span>
-              </Button>
-            </Link>
-          )}
-
-          {isCancellable && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setCancelDialogOpen(true)}
-              className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-            >
-              <Ban className="w-3.5 h-3.5" />
-              <span>Cancel Order</span>
+      <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ask the branch to cancel</DialogTitle>
+            <DialogDescription>The kitchen has already accepted your order. Staff will approve or decline your request.</DialogDescription>
+          </DialogHeader>
+          <Textarea rows={3} maxLength={255} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why do you want to cancel?" />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRequestOpen(false)}>Keep order</Button>
+            <Button variant="destructive" loading={busy} disabled={!reason.trim()}
+              onClick={() => act(() => requestCancellation(id, reason.trim()), 'Request sent to the branch').then(() => setRequestOpen(false))}>
+              Send request
             </Button>
-          )}
-        </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link to={user?.role === 'CUSTOMER' ? '/orders' : '/'} className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-primary">
+          <ArrowLeft className="h-4 w-4" /> {user?.role === 'CUSTOMER' ? 'My orders' : 'Home'}
+        </Link>
+        <button type="button" onClick={() => reload()} className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-primary cursor-pointer">
+          <RefreshCw className="h-3.5 w-3.5" /> Live · updates every few seconds
+        </button>
       </div>
 
-      {order?.paymentMethod === 'CASH_ON_DELIVERY' && order.paymentStatus === 'PENDING' && (
-        <div className="p-4 rounded-3xl bg-blue-500/10 border border-blue-500/20 flex items-center gap-3 text-xs text-blue-700 dark:text-blue-300">
-          <Banknote className="w-5 h-5 shrink-0 text-blue-600 dark:text-blue-400" />
+      <motion.header initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+        className="rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="font-bold text-sm">Cash due at handover</p>
-            <p className="mt-0.5 text-muted-foreground">
-              Please pay <strong className="text-foreground font-bold">Rs. {order.grandTotal.toFixed(2)}</strong> {order.fulfillmentType === 'TAKEAWAY' ? 'at the counter' : 'to your delivery partner'} when you receive your order.
-            </p>
+            <p className="text-xs font-bold uppercase tracking-wider text-primary">Order #{order.id}</p>
+            <h1 className="mt-1 text-2xl sm:text-3xl font-black">{order.branchNameSnapshot}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Placed {timeAgo(order.createdAt)} · {humanize(order.fulfillmentType)}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge status={order.awaitingAcceptance ? 'AWAITING_ACCEPTANCE' : order.status} />
+            <StatusBadge status={order.paymentStatus} />
           </div>
         </div>
-      )}
+        <StatusStepper currentStatus={order.status} fulfillmentType={order.fulfillmentType} paymentMethod={order.paymentMethod} />
+      </motion.header>
 
-      {/* COD Cash Verified by Rider Banner */}
-      {order?.paymentMethod === 'CASH_ON_DELIVERY' && order.paymentStatus === 'VERIFIED' && (
-        <div className="p-4 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-3 text-xs text-emerald-700 dark:text-emerald-300">
-          <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          <div>
-            <p className="font-bold text-sm">Cash payment received</p>
-            <p className="mt-0.5 text-muted-foreground">
-              Cash payment of <strong className="text-foreground font-bold">Rs. {order.cashCollected?.toFixed(2) ?? order.grandTotal.toFixed(2)}</strong> was recorded. Change: Rs. {order.changeGiven?.toFixed(2) ?? '0.00'}.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Guest Claiming Prompt Banner */}
-      {canClaimGuestOrder && (
-        <div className="p-4 rounded-3xl bg-primary/10 border border-primary/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2.5 text-foreground">
-            <Sparkles className="w-5 h-5 text-primary shrink-0" />
-            <div>
-              <p className="font-bold text-sm">Claim This Order to Your Account</p>
-              <p className="text-muted-foreground mt-0.5">
-                This order was placed as a guest. Link it to your registered account to track it in your Order History.
-              </p>
-            </div>
-          </div>
-          <Button
-            size="sm"
-            onClick={handleClaimGuestOrder}
-            disabled={claiming}
-            className="shrink-0 self-start sm:self-auto"
-          >
-            {claiming ? 'Claiming...' : 'Claim Order'}
-          </Button>
-        </div>
-      )}
-
-      {/* Refund Status Alert */}
-      {order?.refundStatus === 'PENDING' && (
-        <div className="p-4 rounded-3xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between gap-3 text-xs text-amber-600 dark:text-amber-400">
-          <div className="flex items-center gap-2 font-medium">
-            <AlertCircle className="w-5 h-5 shrink-0" />
-            <div>
-              <p className="font-bold text-sm">Refund Pending</p>
-              <p className="mt-0.5">
-                A refund of Rs. {order.grandTotal.toFixed(2)} is pending for this cancelled order and will be credited to your original payment method.
-              </p>
-            </div>
-          </div>
-          <StatusBadge status="REFUND_PENDING" />
-        </div>
-      )}
-
-      {order?.paymentStatus === 'REFUNDED' && (
-        <div className="p-4 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 text-sm text-emerald-700 dark:text-emerald-300">
-          <strong>Refund completed.</strong> Rs. {order.refundedAmount?.toFixed(2) ?? order.grandTotal.toFixed(2)} was refunded through the mock gateway.
-        </div>
-      )}
-
-      {order?.status === 'DELIVERY_FAILED' && order.failureReason && (
-        <div className="p-4 rounded-3xl bg-destructive/10 border border-destructive/20 text-sm text-destructive">
-          <strong>Delivery failed:</strong> {order.failureReason.replaceAll('_', ' ').toLowerCase()}.
-        </div>
-      )}
-
-      {/* Pipeline Status Stepper Card */}
-      <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-xs">
-        <h2 className="text-base font-black text-foreground mb-6">Live Status Tracker</h2>
-        {order && (
-          <StatusStepper
-            currentStatus={order.status}
-            fulfillmentType={order.fulfillmentType}
-            paymentMethod={order.paymentMethod}
-          />
-        )}
-      </div>
-
-      <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-xs">
-        <h2 className="text-base font-black text-foreground mb-4">Status history</h2>
-        <ol className="space-y-3 text-sm">
-          {history.map((entry) => (
-            <li key={entry.id} className="flex flex-wrap justify-between gap-2 border-b border-border pb-3 last:border-0 last:pb-0">
-              <span><strong>{entry.toStatus.replaceAll('_', ' ')}</strong>{entry.note ? ` — ${entry.note}` : ''}</span>
-              <time className="text-muted-foreground">{new Date(entry.changedAt).toLocaleString()}</time>
-            </li>
-          ))}
-        </ol>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Itemized Bill Breakdown */}
-        <div className="lg:col-span-2 bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-xs">
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
-            <div className="flex items-center gap-2 text-foreground font-black text-lg">
-              <Receipt className="w-5 h-5 text-primary" />
-              <span>Itemized Bill</span>
-            </div>
-            <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-secondary text-secondary-foreground border border-border">
-              {order?.paymentMethod === 'CASH_ON_DELIVERY'
-                ? order.paymentStatus === 'VERIFIED'
-                  ? 'Payment: Cash Collected'
-                  : `Payment: Cash Due ${order.fulfillmentType === 'TAKEAWAY' ? 'at Counter' : 'on Delivery'}`
-                : `Payment: ${order?.paymentStatus} (${order?.paymentMethod?.replaceAll('_', ' ') ?? 'Card'})`}
+      <AnimatePresence>
+        {order.awaitingAcceptance && (
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="flex items-center gap-4 rounded-3xl border border-warning/30 bg-warning/10 p-5">
+            <span className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-warning/20 text-warning animate-ring-pulse">
+              <ChefHat className="h-6 w-6" />
             </span>
-          </div>
+            <div>
+              <p className="font-black text-foreground">Waiting for the branch to accept</p>
+              <p className="text-sm text-muted-foreground">
+                Staff usually confirm within a few minutes. If nobody accepts in 10 minutes the order is cancelled{order.paymentStatus === 'VERIFIED' ? ' and refunded' : ''} automatically.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          {/* Items Table */}
-          <div className="space-y-4 mb-6 divide-y divide-border">
-            {order?.items.map((item) => (
-              <div key={item.id} className="pt-3 first:pt-0 flex justify-between items-center gap-4 text-sm">
-                <div className="flex-1">
-                  <p className="font-bold text-foreground">{item.itemNameSnapshot}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Rs. {item.unitPriceSnapshot.toFixed(2)} × {item.quantity}
-                  </p>
+      {order.cancelRequestStatus && (
+        <Alert tone={order.cancelRequestStatus === 'PENDING' ? 'warning' : order.cancelRequestStatus === 'APPROVED' ? 'success' : 'info'}>
+          <span className="font-bold">
+            {order.cancelRequestStatus === 'PENDING' && 'Your cancellation request is waiting for the branch.'}
+            {order.cancelRequestStatus === 'APPROVED' && 'The branch approved your cancellation.'}
+            {order.cancelRequestStatus === 'DECLINED' && 'The branch could not cancel this order — it is already being prepared.'}
+          </span>
+          {order.cancelRequestNote && <span className="block text-xs opacity-80">Note from staff: {order.cancelRequestNote}</span>}
+        </Alert>
+      )}
+      {order.refundStatus === 'PENDING' && (
+        <Alert tone="warning">A refund of {formatLKR(order.grandTotal)} is being processed to your card.</Alert>
+      )}
+      {order.paymentStatus === 'REFUNDED' && (
+        <Alert tone="success"><CheckCircle2 className="mr-1 inline h-4 w-4" /> {formatLKR(order.refundedAmount ?? order.grandTotal)} refunded to your card.</Alert>
+      )}
+      {order.status === 'DELIVERY_FAILED' && (
+        <Alert><AlertCircle className="mr-1 inline h-4 w-4" /> Delivery failed: {humanize(order.failureReason)}.</Alert>
+      )}
+      {order.status === 'CANCELLED' && order.cancellationReason && (
+        <Alert tone="info">Cancelled · {humanize(order.cancellationReason)}</Alert>
+      )}
+      {canClaim && (
+        <Alert tone="info" className="flex flex-wrap items-center justify-between gap-3">
+          <span>This order was placed as a guest. Link it to your account to see it in your history.</span>
+          <Button size="sm" loading={busy} onClick={() => act(() => claimGuestOrders(id), 'Order linked to your account')}>
+            <Link2 className="h-4 w-4" /> Link to my account
+          </Button>
+        </Alert>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+        <div className="space-y-6">
+          {tracking && order.fulfillmentType === 'DELIVERY' && <DeliveryTracker tracking={tracking} />}
+
+          {(needsPayment || canCancelNow || canRequestCancel) && (
+            <section className="flex flex-wrap gap-3 rounded-3xl border border-border bg-card p-5 shadow-sm">
+              {needsPayment && (
+                <Link to={`/order/${id}/payment`} className="flex-1 min-w-[200px]">
+                  <Button variant="glow" size="lg" className="w-full"><CreditCard className="h-4 w-4" /> Pay {formatLKR(order.grandTotal)}</Button>
+                </Link>
+              )}
+              {canCancelNow && (
+                <Button variant="outline" size="lg" onClick={() => setCancelOpen(true)}><Ban className="h-4 w-4" /> Cancel order</Button>
+              )}
+              {canRequestCancel && (
+                <Button variant="outline" size="lg" onClick={() => setRequestOpen(true)}><Undo2 className="h-4 w-4" /> Request cancellation</Button>
+              )}
+            </section>
+          )}
+
+          <section className="rounded-3xl border border-border bg-card p-6 shadow-sm space-y-4">
+            <h2 className="flex items-center gap-2 text-lg font-black"><Receipt className="h-5 w-5 text-primary" /> Items</h2>
+            {order.items.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl bg-secondary/50 p-3">
+                <div>
+                  <p className="font-semibold">{item.itemNameSnapshot}</p>
+                  <p className="text-xs text-muted-foreground">{formatLKR(item.unitPriceSnapshot)} each</p>
                 </div>
-
-                {/* Item-level modification controls in eligible window */}
-                {isItemEditEligible && (
-                  <div className="flex items-center bg-secondary rounded-xl p-0.5 border border-border">
-                    <button
-                      type="button"
-                      disabled={editingItemId === item.id || item.quantity <= 1}
-                      onClick={() => handleUpdateItemQuantity(item.id, item.quantity - 1)}
-                      className="w-7 h-7 rounded-lg bg-card hover:bg-muted text-foreground border border-border flex items-center justify-center transition disabled:opacity-40 cursor-pointer"
-                      title="Decrease quantity"
-                    >
-                      <Minus className="w-3 h-3" />
-                    </button>
-                    <span className="w-7 text-center text-xs font-bold text-foreground">
-                      {item.quantity}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={editingItemId === item.id}
-                      onClick={() => handleUpdateItemQuantity(item.id, item.quantity + 1)}
-                      className="w-7 h-7 rounded-lg bg-primary hover:bg-primary-hover text-primary-foreground flex items-center justify-center transition disabled:opacity-40 cursor-pointer"
-                      title="Increase quantity"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
-
-                <span className="font-black text-foreground">
-                  Rs. {item.lineTotal.toFixed(2)}
-                </span>
+                <div className="flex items-center gap-3">
+                  {canEditItems ? (
+                    <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-1">
+                      <button type="button" disabled={busy || item.quantity <= 1} aria-label="Decrease"
+                        onClick={() => act(() => updateOrderItem(id, item.id, item.quantity - 1), 'Quantity updated')}
+                        className="grid h-7 w-7 place-items-center rounded-lg hover:bg-secondary disabled:opacity-40 cursor-pointer"><Minus className="h-3.5 w-3.5" /></button>
+                      <span className="w-6 text-center text-sm font-bold">{item.quantity}</span>
+                      <button type="button" disabled={busy} aria-label="Increase"
+                        onClick={() => act(() => updateOrderItem(id, item.id, item.quantity + 1), 'Quantity updated')}
+                        className="grid h-7 w-7 place-items-center rounded-lg hover:bg-secondary cursor-pointer"><Plus className="h-3.5 w-3.5" /></button>
+                    </div>
+                  ) : (
+                    <span className="text-sm font-bold">× {item.quantity}</span>
+                  )}
+                  <span className="w-24 text-right font-bold">{formatLKR(item.lineTotal)}</span>
+                </div>
               </div>
             ))}
-          </div>
+            <div className="space-y-1.5 border-t border-border pt-3 text-sm text-muted-foreground">
+              <div className="flex justify-between"><span>Subtotal</span><span>{formatLKR(bill.subtotal)}</span></div>
+              <div className="flex justify-between"><span>Delivery</span><span>{formatLKR(bill.deliveryFee)}</span></div>
+              <div className="flex justify-between"><span>Tax ({bill.taxRatePercent}%)</span><span>{formatLKR(bill.taxAmount)}</span></div>
+              {bill.discountAmount > 0 && <div className="flex justify-between text-success"><span>Discount ({bill.promoCode})</span><span>−{formatLKR(bill.discountAmount)}</span></div>}
+              {bill.cashCollected != null && <div className="flex justify-between"><span>Cash given / change</span><span>{formatLKR(bill.cashCollected)} / {formatLKR(bill.changeGiven)}</span></div>}
+            </div>
+            <div className="flex justify-between border-t border-border pt-3 text-xl font-black">
+              <span>Total</span><span className="text-primary">{formatLKR(order.grandTotal)}</span>
+            </div>
+            {order.cardLast4 && <p className="text-xs text-muted-foreground">Paid with {order.cardBrand} •••• {order.cardLast4}</p>}
+          </section>
 
-          {/* Calculation Breakdown */}
-          <div className="border-t border-border pt-4 space-y-2 text-xs text-muted-foreground">
-            <div className="flex justify-between">
-              <span>Subtotal</span>
-              <span className="font-semibold text-foreground">Rs. {bill?.subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Delivery Fee ({bill?.fulfillmentType})</span>
-              <span className="font-semibold text-foreground">
-                {(bill?.deliveryFee ?? 0) > 0 ? `Rs. ${bill?.deliveryFee.toFixed(2)}` : 'FREE'}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span>Tax ({bill?.taxRatePercent}%)</span>
-              <span className="font-semibold text-foreground">Rs. {bill?.taxAmount.toFixed(2)}</span>
-            </div>
-            {(bill?.discountAmount ?? 0) > 0 && (
-              <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
-                <span>Promo Discount ({bill?.promoCode})</span>
-                <span>- Rs. {bill?.discountAmount.toFixed(2)}</span>
-              </div>
-            )}
-            <div className="border-t border-border pt-3 flex justify-between text-base font-black text-foreground">
-              <span>Grand Total</span>
-              <span className="text-primary text-xl font-black">Rs. {bill?.grandTotal.toFixed(2)}</span>
-            </div>
-          </div>
+          {['DELIVERED', 'COMPLETED', 'DELIVERY_FAILED'].includes(order.status) && isOwner && (
+            <OrderFeedback orderId={id} status={order.status} />
+          )}
         </div>
 
-        {/* Order Meta Card */}
-        <div className="space-y-6">
-          <div className="bg-card border border-border rounded-3xl p-6 text-xs text-muted-foreground space-y-4 shadow-xs">
-            <h3 className="text-sm font-black text-foreground">Delivery & Contact</h3>
+        <aside className="space-y-6">
+          <section className="rounded-3xl border border-border bg-card p-6 shadow-sm space-y-3 text-sm">
+            <h2 className="text-sm font-black uppercase tracking-wider text-muted-foreground">Details</h2>
+            <p className="flex items-start gap-2"><Store className="mt-0.5 h-4 w-4 text-primary" /> {order.branchNameSnapshot}<br />{order.branchAddressSnapshot}</p>
+            {order.deliveryAddress && <p className="flex items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 text-primary" /> {order.deliveryAddress}</p>}
+            {(order.contactPhone || order.guestPhone) && <p className="flex items-center gap-2"><Phone className="h-4 w-4 text-primary" /> {order.contactName} · {order.contactPhone || order.guestPhone}</p>}
+            <p className="flex items-center gap-2"><CreditCard className="h-4 w-4 text-primary" /> {order.paymentMethod ? humanize(order.paymentMethod) : 'Not paid yet'}</p>
+          </section>
 
-            <div className="space-y-3">
-              <div>
-                <span className="text-muted-foreground uppercase font-bold text-[10px] block">Recipient</span>
-                <span className="text-foreground font-bold text-sm flex items-center gap-1.5 mt-0.5">
-                  <User className="w-3.5 h-3.5 text-primary" />
-                  {order?.contactName || (order?.customerId ? `Customer #${order.customerId}` : order?.guestName)}
-                </span>
-              </div>
-
-              {(order?.contactPhone || order?.guestPhone) && (
-                <div>
-                  <span className="text-muted-foreground uppercase font-bold text-[10px] block">Contact Phone</span>
-                  <span className="text-foreground font-semibold flex items-center gap-1.5 mt-0.5">
-                    <Phone className="w-3.5 h-3.5 text-primary" />
-                    {order.contactPhone || order.guestPhone}
-                  </span>
-                </div>
-              )}
-
-              {order?.deliveryAddress && (
-                <div>
-                  <span className="text-muted-foreground uppercase font-bold text-[10px] block">Delivery Destination</span>
-                  <p className="text-foreground font-semibold flex items-start gap-1.5 mt-0.5">
-                    <MapPin className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-                    <span>{order.deliveryAddress}</span>
-                  </p>
-                </div>
-              )}
-
-              <div>
-                <span className="text-muted-foreground uppercase font-bold text-[10px] block">Order Branch</span>
-                <span className="text-foreground font-semibold flex items-center gap-1.5 mt-0.5">
-                  <Store className="w-3.5 h-3.5 text-muted-foreground" />
-                  {order?.branchNameSnapshot || `Branch #${order?.branchId}`}
-                </span>
-                {order?.branchAddressSnapshot && (
-                  <span className="text-muted-foreground text-xs block pl-5 mt-0.5">
-                    {order.branchAddressSnapshot}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {isPreparingOrLater && (
-              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px] leading-relaxed">
-                Notice: Food preparation has begun. In accordance with BigBite policy, cancellations are no longer permitted.
-              </div>
-            )}
-          </div>
-        </div>
+          <section className="rounded-3xl border border-border bg-card p-6 shadow-sm space-y-4">
+            <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-wider text-muted-foreground"><History className="h-4 w-4" /> Timeline</h2>
+            <ol className="relative space-y-4 border-l-2 border-border pl-5">
+              {history.map((entry, i) => (
+                <motion.li key={entry.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }} className="relative">
+                  <span className={`absolute -left-[27px] top-1 h-3 w-3 rounded-full border-2 border-card ${i === history.length - 1 ? 'bg-primary animate-ring-pulse' : 'bg-muted-foreground/50'}`} />
+                  <p className="text-sm font-bold">{humanize(entry.toStatus)}</p>
+                  {entry.note && <p className="text-xs text-muted-foreground">{entry.note}</p>}
+                  <p className="flex items-center gap-1 text-[11px] text-muted-foreground"><Clock className="h-3 w-3" /> {formatDateTime(entry.changedAt)} · {humanize(entry.actorRole)}</p>
+                </motion.li>
+              ))}
+            </ol>
+          </section>
+        </aside>
       </div>
     </div>
   )

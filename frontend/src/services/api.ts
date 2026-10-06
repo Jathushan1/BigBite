@@ -1,147 +1,69 @@
+import { apiRequest } from '@/lib/http'
 import type { AuthResponse, Role, User, UserStatus } from '../types/auth'
 
-const API_BASE = ''
+export { ApiError, errorMessage } from '@/lib/http'
 
-function getHeaders(): HeadersInit {
-  const token = localStorage.getItem('token')
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  return headers
-}
+export type PartnerVariant = 'branch-manager' | 'staff' | 'delivery-partner'
 
-async function handleApiResponse<T>(res: Response, defaultError = 'Request failed'): Promise<T> {
-  let data: any = null
-  try {
-    const text = await res.text()
-    if (text) {
-      data = JSON.parse(text)
-    }
-  } catch {
-    // Response body is not JSON or is empty
-  }
+// ---------------------------------------------------------------- auth
 
-  if (!res.ok) {
-    if (res.status === 502 || res.status === 503 || res.status === 504) {
-      throw new Error(
-        'Backend server is not running or unreachable (502 Bad Gateway). Please make sure the backend is started on port 8080.'
-      )
-    }
+export const loginApi = (email: string, password: string) =>
+  apiRequest<AuthResponse>('/api/auth/login', { method: 'POST', body: { email, password } })
 
-    if (data) {
-      if (data.errors && typeof data.errors === 'object') {
-        const errorList = Object.values(data.errors).filter(Boolean).join(', ')
-        if (errorList) throw new Error(errorList)
-      }
-      if (data.message) {
-        throw new Error(data.message)
-      }
-    }
+export const registerCustomerApi = (name: string, email: string, phoneNumber: string, password: string) =>
+  apiRequest<AuthResponse>('/api/auth/register/customer', { method: 'POST', body: { name, email, phoneNumber, password } })
 
-    throw new Error(`${defaultError} (${res.status} ${res.statusText || 'Error'})`)
-  }
-
-  return (data ?? {}) as T
-}
-
-export async function loginApi(email: string, password: string): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/api/auth/login`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ email, password }),
-  })
-
-  return handleApiResponse<AuthResponse>(res, 'Login failed')
-}
-
-export async function registerCustomerApi(
+export const registerStaffApi = (
+  variant: PartnerVariant,
   name: string,
   email: string,
   phoneNumber: string,
-  password: string
-): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/api/auth/register/customer`, {
+  password: string,
+  branchId?: number
+) =>
+  apiRequest<AuthResponse>(`/api/auth/register/${variant}`, {
     method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ name, email, phoneNumber, password }),
+    body: { name, email, phoneNumber, password, branchId },
   })
-  return handleApiResponse<AuthResponse>(res, 'Registration failed')
+
+export const getMeApi = () => apiRequest<User>('/api/auth/me')
+
+export const forgotPasswordApi = (email: string) =>
+  apiRequest<{ message: string }>('/api/auth/forgot-password', { method: 'POST', body: { email } })
+
+export const resetPasswordApi = (token: string, newPassword: string) =>
+  apiRequest<{ message: string }>('/api/auth/reset-password', { method: 'POST', body: { token, newPassword } })
+
+export const changePasswordApi = (currentPassword: string, newPassword: string) =>
+  apiRequest<{ message: string }>('/api/auth/change-password', { method: 'PUT', body: { currentPassword, newPassword } })
+
+// ---------------------------------------------------------------- Super Admin: users
+
+export const getPendingUsersApi = () => apiRequest<User[]>('/api/admin/users/pending')
+
+export const approveUserApi = (userId: number) => apiRequest<User>(`/api/admin/users/${userId}/approve`, { method: 'PUT' })
+
+export const rejectUserApi = (userId: number, reason?: string) =>
+  apiRequest<User>(`/api/admin/users/${userId}/reject`, { method: 'PUT', body: { reason } })
+
+export const assignBranchApi = (userId: number, branchId: number) =>
+  apiRequest<User>(`/api/admin/users/${userId}/assign-branch`, { method: 'PUT', body: { branchId } })
+
+export const getUsersFilteredApi = (role?: Role, status?: UserStatus) =>
+  apiRequest<User[]>('/api/admin/users', { query: { role, status } })
+
+export const deleteUserApi = (userId: number) => apiRequest<void>(`/api/admin/users/${userId}`, { method: 'DELETE' })
+
+// ---------------------------------------------------------------- dev outbox (mock email)
+
+export interface OutboxMessage {
+  id: number
+  to: string
+  subject: string
+  body: string
+  actionUrl?: string | null
+  sentAt: string
 }
 
-export async function registerStaffApi(
-  variant: 'branch-manager' | 'delivery-partner',
-  name: string,
-  email: string,
-  phoneNumber: string,
-  password: string
-): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/api/auth/register/${variant}`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ name, email, phoneNumber, password }),
-  })
-  return handleApiResponse<AuthResponse>(res, 'Registration failed')
-}
-
-export async function getMeApi(): Promise<User> {
-  const res = await fetch(`${API_BASE}/api/auth/me`, {
-    headers: getHeaders(),
-  })
-  return handleApiResponse<User>(res, 'Failed to fetch user')
-}
-
-// SuperAdmin Endpoints
-export async function getPendingUsersApi(): Promise<User[]> {
-  const res = await fetch(`${API_BASE}/api/admin/users/pending`, {
-    headers: getHeaders(),
-  })
-  return handleApiResponse<User[]>(res, 'Failed to fetch pending users')
-}
-
-export async function approveUserApi(userId: number): Promise<User> {
-  const res = await fetch(`${API_BASE}/api/admin/users/${userId}/approve`, {
-    method: 'PUT',
-    headers: getHeaders(),
-  })
-  return handleApiResponse<User>(res, 'Failed to approve user')
-}
-
-export async function rejectUserApi(userId: number, reason?: string): Promise<User> {
-  const res = await fetch(`${API_BASE}/api/admin/users/${userId}/reject`, {
-    method: 'PUT',
-    headers: getHeaders(),
-    body: JSON.stringify({ reason }),
-  })
-  return handleApiResponse<User>(res, 'Failed to reject user')
-}
-
-export async function assignBranchApi(userId: number, branchId: number): Promise<User> {
-  const res = await fetch(`${API_BASE}/api/admin/users/${userId}/assign-branch`, {
-    method: 'PUT',
-    headers: getHeaders(),
-    body: JSON.stringify({ branchId }),
-  })
-  return handleApiResponse<User>(res, 'Failed to assign branch')
-}
-
-export async function getUsersFilteredApi(role?: Role, status?: UserStatus): Promise<User[]> {
-  const params = new URLSearchParams()
-  if (role) params.append('role', role)
-  if (status) params.append('status', status)
-
-  const res = await fetch(`${API_BASE}/api/admin/users?${params.toString()}`, {
-    headers: getHeaders(),
-  })
-  return handleApiResponse<User[]>(res, 'Failed to fetch users')
-}
-
-export async function deleteUserApi(userId: number): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/admin/users/${userId}`, {
-    method: 'DELETE',
-    headers: getHeaders(),
-  })
-  await handleApiResponse<void>(res, 'Failed to delete user')
-}
+export const getOutboxApi = () => apiRequest<OutboxMessage[]>('/api/dev/outbox')
+export const clearOutboxApi = () => apiRequest<void>('/api/dev/outbox', { method: 'DELETE' })

@@ -1,0 +1,91 @@
+/* ============================================================================
+   BigBite global theme — THE single place where colours, radius and fonts live.
+
+   • Change any value below and the whole app follows (every component uses
+     these tokens through Tailwind classes such as bg-primary, text-success).
+   • Hover / pressed / glow shades are DERIVED from --primary with color-mix(),
+     so changing --primary alone re-brands buttons, links, badges and glows.
+   • The in-app Theme Studio (palette button, bottom-left) edits these same
+     variables live and can copy the result back as CSS for this file.
+   ============================================================================ */
+
+:root {
+  /* ---- Brand ---------------------------------------------------------------- */
+  --primary: #E4002B;              /* BigBite red: buttons, links, highlights */
+  --primary-foreground: #FFFFFF;   /* text/icons on --primary */
+  --accent: #FF2B4F;               /* gradients, soft highlights */
+  --accent-foreground: #FFFFFF;
+
+  /* Derived shades (do not edit; they follow --primary automatically) */
+  --primary-hover: color-mix(in oklab, var(--primary) 88%, black);
+  --primary-active: color-mix(in oklab, var(--primary) 76%, black);
+  --primary-soft: color-mix(in oklab, var(--primary) 12%, transparent);
+  --glow-primary: 0 0 28px -4px color-mix(in oklab, var(--primary) 55%, transparent);
+  --glow-accent: 0 0 28px -4px color-mix(in oklab, var(--accent) 50%, transparent);
+
+  /* ---- Surfaces --------------------------------------------------------------- */
+  --background: #F8F9FA;           /* page */
+  --foreground: #18181B;           /* body text */
+  --card: #FFFFFF;                 /* cards, panels */
+  --card-foreground: #18181B;
+  --popover: #FFFFFF;              /* dialogs, menus, toasts */
+  --popover-foreground: #18181B;
+  --secondary: #F4F4F5;            /* secondary buttons, subtle fills */
+  --secondary-foreground: #18181B;
+  --muted: #F4F4F5;
+  --muted-foreground: #71717A;     /* captions, timestamps */
+  --border: rgba(228, 228, 231, 0.9);
+  --input: rgba(228, 228, 231, 0.9);
+  --ring: var(--accent);           /* focus ring */
+
+  /* ---- Feedback --------------------------------------------------------------- */
+  --success: #16A34A;
+  --warning: #D97706;
+  --info: #2563EB;
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+
+  /* ---- Order status ----------------------------------------------------------- */
+  --status-placed: #71717A;
+  --status-confirmed: #2563EB;
+  --status-preparing: #D97706;
+  --status-out-for-delivery: #7C3AED;
+  --status-ready: #0891B2;
+  --status-completed: #16A34A;
+  --status-cancelled: #71717A;
+  --status-refund-pending: #DC2626;
+
+  /* ---- Shape & type ----------------------------------------------------------- */
+  --radius: 0.75rem;               /* base radius; every rounded-* class scales from it */
+  --app-font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --app-font-display: 'Poppins', var(--app-font);
+}
+
+.dark {
+  --background: #0B0B0E;
+  --foreground: #F4F4F5;
+  --card: #17171B;
+  --card-foreground: #F4F4F5;
+  --popover: #17171B;
+  --popover-foreground: #F4F4F5;
+  --secondary: #232327;
+  --secondary-foreground: #F4F4F5;
+  --muted: #232327;
+  --muted-foreground: #A1A1AA;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.12);
+
+  --success: #4ADE80;
+  --warning: #FBBF24;
+  --info: #60A5FA;
+  --destructive: #EF4444;
+
+  --status-placed: #A1A1AA;
+  --status-confirmed: #60A5FA;
+  --status-preparing: #FBBF24;
+  --status-out-for-delivery: #A78BFA;
+  --status-ready: #22D3EE;
+  --status-completed: #4ADE80;
+  --status-cancelled: #A1A1AA;
+  --status-refund-pending: #F87171;
+}

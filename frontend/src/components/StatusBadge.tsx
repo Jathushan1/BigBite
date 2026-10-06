@@ -55,10 +55,33 @@ export function StatusBadge({ status, className, dot = true }: StatusBadgeProps)
       colorClasses = 'bg-status-refund-pending/15 text-status-refund-pending border-status-refund-pending/30'
       label = normalized === 'REFUND_PENDING' ? 'Refund Pending' : normalized === 'VOIDED' ? 'Voided' : 'Pending'
       break
+    case 'ACTIVE':
+    case 'APPROVED':
+    case 'OPEN':
+      colorClasses = 'bg-success/15 text-success border-success/30'
+      label = normalized === 'OPEN' ? 'Open now' : normalized === 'APPROVED' ? 'Approved' : 'Active'
+      break
+    case 'INACTIVE':
+    case 'CLOSED':
+    case 'SUSPENDED':
+      colorClasses = 'bg-muted text-muted-foreground border-border'
+      label = normalized === 'CLOSED' ? 'Closed' : normalized === 'SUSPENDED' ? 'Suspended' : 'Inactive'
+      break
+    case 'PENDING_APPROVAL':
+    case 'AWAITING_ACCEPTANCE':
+      colorClasses = 'bg-warning/15 text-warning border-warning/30'
+      label = normalized === 'AWAITING_ACCEPTANCE' ? 'Awaiting acceptance' : 'Pending approval'
+      break
+    case 'REJECTED':
+    case 'DECLINED':
+      colorClasses = 'bg-destructive/10 text-destructive border-destructive/30'
+      label = normalized === 'DECLINED' ? 'Declined' : 'Rejected'
+      break
     case 'ROLE_ADMIN':
     case 'ADMIN':
+    case 'SUPER_ADMIN':
       colorClasses = 'bg-primary/15 text-primary border-primary/30'
-      label = 'Admin'
+      label = 'Super Admin'
       break
     case 'ROLE_BRANCH_MANAGER':
     case 'BRANCH_MANAGER':
@@ -68,12 +91,13 @@ export function StatusBadge({ status, className, dot = true }: StatusBadgeProps)
     case 'ROLE_STAFF':
     case 'STAFF':
       colorClasses = 'bg-status-ready/15 text-status-ready border-status-ready/30'
-      label = 'Kitchen Staff'
+      label = 'Branch Staff'
       break
     case 'ROLE_DELIVERY_DRIVER':
     case 'DELIVERY_DRIVER':
+    case 'DELIVERY_PARTNER':
       colorClasses = 'bg-status-preparing/15 text-status-preparing border-status-preparing/30'
-      label = 'Delivery Driver'
+      label = 'Delivery Partner'
       break
     case 'ROLE_CUSTOMER':
     case 'CUSTOMER':

@@ -39,7 +39,7 @@ const DEFAULT_SLIDES: PromoSlide[] = [
     discount: 'CODE: CHEESEPULL • 15% OFF',
     ctaText: 'Explore Menu',
     ctaLink: '/order',
-    bgGradient: 'from-amber-950/90 via-amber-900/60 to-black/80',
+    bgGradient: 'from-warning/90 via-warning/60 to-black/80',
     image: 'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=1200&q=80',
   },
   {
@@ -143,7 +143,7 @@ export const PromoCarousel: React.FC<PromoCarouselProps> = ({
               </p>
 
               <div className="flex flex-wrap items-center gap-3 pt-2">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 border border-white/15 backdrop-blur-sm text-xs font-bold text-emerald-400">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/40 border border-white/15 backdrop-blur-sm text-xs font-bold text-success">
                   <Tag className="w-3.5 h-3.5" />
                   <span>{slide.discount}</span>
                 </div>

@@ -2,37 +2,14 @@ import React from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { WelcomePage } from '../pages/WelcomePage'
+import { getRoleLandingPath } from '@/lib/navigation'
+import { PageLoader } from './ProtectedRoute'
 
+/** Guests and customers see the marketing home page; branch-side roles go to their workspace. */
 export const RootRouteResolver: React.FC = () => {
   const { user, token, isLoading } = useAuth()
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="animate-spin rounded-full h-10 w-10 border-4 border-border border-t-primary"></div>
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Loading BigBite...</span>
-        </div>
-      </div>
-    )
-  }
-
-  if (!token || !user) {
-    return <WelcomePage />
-  }
-
-  switch (user.role) {
-    case 'CUSTOMER':
-      // The home page (/) is the Welcome & Marketing Home page.
-      // Customer profile is hosted at /customer/profile.
-      return <WelcomePage />
-    case 'SUPER_ADMIN':
-      return <Navigate to="/admin" replace />
-    case 'BRANCH_MANAGER':
-      return <Navigate to="/branch-manager/dashboard" replace />
-    case 'DELIVERY_PARTNER':
-      return <Navigate to="/delivery/dashboard" replace />
-    default:
-      return <WelcomePage />
-  }
+  if (isLoading) return <PageLoader />
+  if (!token || !user || user.role === 'CUSTOMER') return <WelcomePage />
+  return <Navigate to={getRoleLandingPath(user.role)} replace />
 }

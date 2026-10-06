@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
 
 export function OrderHistoryPage() {
   const { user } = useAuth()
-  const [customerId, setCustomerId] = useState<number>(user?.id || 1)
+  const [customerId, setCustomerId] = useState<number | undefined>(user?.id)
   const [orders, setOrders] = useState<OrderResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -55,7 +55,7 @@ export function OrderHistoryPage() {
     try {
       setLoading(true)
       setError(null)
-      const data = await getOrderHistory(customerId)
+      const data = await getOrderHistory()
       setOrders(data)
     } catch (err: any) {
       setError(err.message || 'Failed to fetch order history')
@@ -66,7 +66,7 @@ export function OrderHistoryPage() {
 
   const loadHistorySilent = async () => {
     try {
-      const data = await getOrderHistory(customerId)
+      const data = await getOrderHistory()
       setOrders(data)
     } catch {
       // background poll
@@ -121,8 +121,8 @@ export function OrderHistoryPage() {
             'text-[11px] font-bold px-2 py-0.5 rounded-md border inline-flex items-center gap-1',
             order.paymentMethod === 'CASH_ON_DELIVERY'
               ? order.paymentStatus === 'VERIFIED'
-                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                ? 'bg-success/10 text-success dark:text-success border-success/20'
+                : 'bg-warning/10 text-warning dark:text-warning border-warning/20'
               : 'bg-primary/10 text-primary border-primary/20'
           )}
         >

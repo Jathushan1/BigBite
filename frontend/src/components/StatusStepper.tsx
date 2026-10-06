@@ -234,7 +234,7 @@ export function StatusStepper({ currentStatus, fulfillmentType, paymentMethod }:
       </div>
 
       {isPreparingOrLater && (
-        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
+        <div className="p-3 rounded-xl bg-warning/10 border border-warning/20 flex items-center gap-2 text-xs text-warning dark:text-warning">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>Preparation has started. Order cancellation is now locked.</span>
         </div>

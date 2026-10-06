@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Trash2, Plus, Minus, ArrowRight, ArrowLeft, Tag, AlertCircle, ShoppingBag, Check } from 'lucide-react'
 import { useCart } from '../context/CartContext'
-import { MOCK_BRANCHES } from '../mocks/orderMockData'
+import { getPublicBranch } from '@/api/branchApi'
+import { useAsync } from '@/hooks/useAsync'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FulfillmentToggle } from '@/components/FulfillmentToggle'
@@ -38,7 +39,10 @@ export function CartPage() {
   const [promoMessage, setPromoMessage] = useState<string | null>(null)
   const [itemToRemove, setItemToRemove] = useState<{ id: number; name: string } | null>(null)
 
-  const currentBranch = MOCK_BRANCHES.find((b) => b.id === branchId)
+  const { data: currentBranch } = useAsync(
+    () => (branchId ? getPublicBranch(branchId) : Promise.resolve(undefined)),
+    [branchId]
+  )
 
   const handleApplyPromo = (e: React.FormEvent) => {
     e.preventDefault()
@@ -197,7 +201,7 @@ export function CartPage() {
             <FulfillmentToggle
               value={fulfillmentType}
               onChange={setFulfillmentType}
-              takeawayAvailable={currentBranch ? currentBranch.takeaway : true}
+              takeawayAvailable={currentBranch ? currentBranch.takeawayEnabled : true}
               className="w-full"
             />
 
@@ -277,7 +281,7 @@ export function CartPage() {
                 <p
                   className={cn(
                     'mt-2 text-xs font-semibold',
-                    promoMessage.includes('applied') ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'
+                    promoMessage.includes('applied') ? 'text-success dark:text-success' : 'text-destructive'
                   )}
                 >
                   {promoMessage}
@@ -302,7 +306,7 @@ export function CartPage() {
                 <span className="font-semibold text-foreground">Rs. {taxAmount.toFixed(2)}</span>
               </div>
               {discountAmount > 0 && (
-                <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
+                <div className="flex justify-between text-success dark:text-success font-bold">
                   <span>Promo Discount ({promoCode})</span>
                   <span>- Rs. {discountAmount.toFixed(2)}</span>
                 </div>
@@ -314,7 +318,7 @@ export function CartPage() {
             </div>
 
             {fulfillmentType === 'DELIVERY' && !deliveryAddress.trim() && (
-              <div className="p-3 mb-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 font-medium">
+              <div className="p-3 mb-4 rounded-2xl bg-warning/10 border border-warning/20 flex items-center gap-2 text-xs text-warning dark:text-warning font-medium">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>Please enter your delivery street address to proceed.</span>
               </div>
