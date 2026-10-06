@@ -38,7 +38,7 @@ export const CategorySlider: React.FC<CategorySliderProps> = ({
               className={cn(
                 'inline-flex items-center gap-2 px-4 py-2 rounded-2xl text-xs sm:text-sm font-bold transition-all duration-200 cursor-pointer select-none border',
                 isSelected
-                  ? 'bg-primary text-primary-foreground border-primary shadow-md shadow-primary/25 scale-[1.03]'
+                  ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-card text-muted-foreground border-border/80 hover:border-primary/50 hover:text-foreground hover:bg-secondary/60'
               )}
             >

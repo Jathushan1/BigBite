@@ -47,11 +47,11 @@ Kandy (`kdy01`) and Galle (`gle01`) have the same accounts with their code in th
 
 **Password reset:** with `APP_MAIL_MOCK=true` (default) reset emails appear in the demo mailbox at http://localhost:3000/dev/outbox. Set `APP_MAIL_MOCK=false` and the `MAIL_*` variables to send real email over SMTP. The demo mailbox exposes reset links to anyone who can reach the server, so turn it off (`APP_MAIL_MOCK=false` or `APP_MAIL_OUTBOX_PUBLIC=false`) for anything beyond local demos.
 
-## Changing the theme live
+## Theme
 
-All colours, the corner radius and fonts are CSS variables in [`frontend/src/styles/theme.css`](frontend/src/styles/theme.css); every component uses them through Tailwind classes such as `bg-primary` and `text-success`. Hover, pressed and glow shades derive from `--primary`, so changing that one value re-brands the app.
+All colours, the corner radius and the font are CSS variables in [`frontend/src/styles/theme.css`](frontend/src/styles/theme.css) (light values under `:root`, dark values under `.dark`). Every component uses them through Tailwind classes such as `bg-primary`, `text-muted-foreground` and `text-success`, so editing a value in that one file restyles the whole app. Hover and pressed shades are derived from `--primary`.
 
-The **Theme Studio** (palette button, bottom-left of every page) edits the same variables live: presets, colour pickers per variable, light/dark, radius and font. Changes are remembered in the browser; **Copy CSS** produces a block to paste into `theme.css` to make them permanent. Hide the button with `VITE_THEME_STUDIO=false`.
+The finalized theme is deliberately calm: neutral surfaces, one muted brick red for actions and highlights, no gradients or glows, and text contrast of at least 4.5:1. The sun/moon button in the navbar switches between light and dark.
 
 ## Tests
 
@@ -66,6 +66,6 @@ cd frontend && npm run build       # type-check and production build
 
 - `auth` – registration per role, login, JWT, approvals (admin for managers, managers for their team), forgot/reset/change password.
 - `branch` – branch CRUD, public directory, manager's own branch, sales and monthly reports (fed automatically by completed orders).
-- `menu` – menu items per branch with availability; public read, manager/admin write.
+- `menu` – menu items per branch with availability; public read, manager/admin write. Design patterns explained in [MENU_MODULE_DESIGN_PATTERNS.md](MENU_MODULE_DESIGN_PATTERNS.md).
 - `order` – the order lifecycle; see [ORDER_MODULE_README.md](ORDER_MODULE_README.md). Delivery, inventory, promotions, reviews, complaints, payment and refund gateways are mocked behind interfaces in `order/external/` until those modules exist.
 - `common` – one JSON error format for every endpoint, email sending, rate limiting.

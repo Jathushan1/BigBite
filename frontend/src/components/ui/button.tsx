@@ -15,8 +15,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variants: Record<NonNullable<ButtonProps['variant']>, string> = {
       default: 'bg-primary text-primary-foreground shadow-xs hover:bg-primary-hover active:bg-primary-active',
-      glow: 'bg-primary text-primary-foreground shadow-lg shadow-primary/30 hover:bg-primary-hover active:bg-primary-active hover:shadow-primary/40',
-      gradient: 'bg-gradient-to-r from-primary via-primary-hover to-accent text-white shadow-md hover:opacity-95 active:scale-[0.98]',
+      glow: 'bg-primary text-primary-foreground shadow-xs hover:bg-primary-hover active:bg-primary-active',
+      gradient: 'bg-primary text-primary-foreground shadow-xs hover:bg-primary-hover active:bg-primary-active',
       destructive: 'bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90',
       outline: 'border border-border bg-background hover:bg-secondary text-foreground hover:text-foreground',
       secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border/40',

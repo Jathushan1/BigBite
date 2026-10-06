@@ -7,7 +7,7 @@
     <title>BigBite — Fresh Food Delivered Fast</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Nunito:wght@400;600;700;800&family=Poppins:wght@500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <script>
       (function() {
         try {
@@ -17,18 +17,6 @@
             document.documentElement.classList.add('dark');
           } else {
             document.documentElement.classList.remove('dark');
-          }
-          // Re-apply Theme Studio overrides before first paint (see src/theme/themeStore.ts)
-          var saved = JSON.parse(localStorage.getItem('bigbite.theme.v1') || 'null');
-          if (saved) {
-            var dark = document.documentElement.classList.contains('dark');
-            var vars = Object.assign({}, saved.shared || {}, (dark ? saved.dark : saved.light) || {});
-            for (var key in vars) document.documentElement.style.setProperty(key, vars[key]);
-            if (saved.radius !== null && saved.radius !== undefined) document.documentElement.style.setProperty('--radius', saved.radius + 'rem');
-            if (saved.font) {
-              document.documentElement.style.setProperty('--app-font', saved.font);
-              document.documentElement.style.setProperty('--app-font-display', saved.font);
-            }
           }
         } catch (e) {}
       })();

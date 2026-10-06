@@ -327,7 +327,7 @@ export function CartPage() {
             <Button
               type="button"
               onClick={handleProceed}
-              className="w-full h-12 gap-2 shadow-lg shadow-primary/20 text-base"
+              className="w-full h-12 gap-2 text-base"
             >
               <span>Proceed to Checkout</span>
               <ArrowRight className="w-4 h-4" />

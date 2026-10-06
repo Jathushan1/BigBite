@@ -561,7 +561,7 @@ export function CheckoutPage() {
           <Button
             type="submit"
             disabled={submitting || subtotal < MIN_ORDER_SUBTOTAL}
-            className="w-full h-13 text-base font-bold shadow-lg shadow-primary/20 gap-2"
+            className="w-full h-13 text-base font-bold gap-2"
           >
             {submitting ? (
               <>

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { ArrowRight, BarChart3, Palette, Receipt, Store, TrendingUp, UserCheck, Users } from 'lucide-react'
+import { ArrowRight, BarChart3, Receipt, Store, TrendingUp, UserCheck, Users } from 'lucide-react'
 import { getBranches, getFranchiseReport } from '@/api/branchApi'
 import { getPendingUsersApi } from '@/services/api'
 import { useAsync } from '@/hooks/useAsync'
@@ -25,16 +25,12 @@ export function AdminOverview() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
       <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-3xl bg-brand-gradient p-8 text-primary-foreground shadow-xl glow-primary">
-        <motion.div className="absolute -right-10 -top-10 h-60 w-60 rounded-full bg-white/15 blur-2xl" animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 6, repeat: Infinity }} />
-        <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-80">Super Admin</p>
+        className="rounded-3xl border border-border bg-card p-8 shadow-xs">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Super Admin</p>
         <h1 className="mt-2 text-3xl sm:text-4xl font-black">Good to see you, {user?.name?.split(' ')[0]}.</h1>
-        <p className="mt-2 max-w-xl opacity-90">
+        <p className="mt-2 max-w-xl text-muted-foreground">
           {report?.monthName}: {formatLKR(report?.totalFranchiseRevenue)} across {report?.totalFranchiseOrders ?? 0} orders.
           {pending.length > 0 && ` ${pending.length} application(s) need your decision.`}
-        </p>
-        <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur">
-          <Palette className="h-3.5 w-3.5" /> Tip: the palette button (bottom-left) restyles the whole app live
         </p>
       </motion.section>
 

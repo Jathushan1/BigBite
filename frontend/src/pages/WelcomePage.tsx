@@ -14,8 +14,6 @@ export const WelcomePage: React.FC = () => {
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-neutral-950 text-white py-16 sm:py-24 lg:py-28">
         {/* Background Ambient Glows */}
-        <div className="absolute top-1/4 left-10 w-96 h-96 bg-primary/20 rounded-full blur-3xl pointer-events-none animate-pulse-glow" />
-        <div className="absolute bottom-10 right-10 w-96 h-96 bg-accent/15 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
@@ -92,7 +90,7 @@ export const WelcomePage: React.FC = () => {
             <div className="lg:col-span-5 relative hidden sm:flex justify-center items-center">
               <div className="relative w-full max-w-md aspect-square">
                 {/* Pizza Image with Subtle Floating Animation */}
-                <div className="w-full h-full rounded-full overflow-hidden border-4 border-white/15 shadow-2xl animate-float">
+                <div className="w-full h-full rounded-full overflow-hidden border-4 border-white/15 shadow-lg">
                   <img
                     src="https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1000&q=80"
                     alt="Artisan Pepperoni Pizza"

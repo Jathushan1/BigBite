@@ -19,8 +19,8 @@ export function SalesChart({ days, year, month, height = 260 }: { days: DailySal
       <AreaChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={colors.primary} stopOpacity={0.45} />
-            <stop offset="100%" stopColor={colors.accent} stopOpacity={0.02} />
+            <stop offset="0%" stopColor={colors.primary} stopOpacity={0.16} />
+            <stop offset="100%" stopColor={colors.primary} stopOpacity={0} />
           </linearGradient>
         </defs>
         <CartesianGrid stroke={colors.border} vertical={false} />
@@ -31,7 +31,7 @@ export function SalesChart({ days, year, month, height = 260 }: { days: DailySal
           labelFormatter={(d) => `Day ${d}`}
           formatter={(value, name) => (name === 'revenue' ? [formatLKR(Number(value)), 'Revenue'] : [String(value), 'Orders'])}
         />
-        <Area type="monotone" dataKey="revenue" stroke={colors.primary} strokeWidth={2.5} fill="url(#revenueFill)" animationDuration={900} />
+        <Area type="monotone" dataKey="revenue" stroke={colors.primary} strokeWidth={2} fill="url(#revenueFill)" animationDuration={900} />
       </AreaChart>
     </ResponsiveContainer>
   )

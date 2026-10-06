@@ -15,7 +15,6 @@ export function DeliveryTracker({ tracking }: { tracking: DeliveryTracking }) {
   const progress = Math.min(100, Math.max(0, tracking.progressPercent))
   return (
     <section className="relative overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-sm space-y-5">
-      <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-status-out-for-delivery/15 blur-3xl" />
       <div className="relative flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-status-out-for-delivery">Live delivery</p>
@@ -36,7 +35,7 @@ export function DeliveryTracker({ tracking }: { tracking: DeliveryTracking }) {
       <div className="relative pt-6 pb-2">
         <div className="h-2 rounded-full bg-secondary" />
         <motion.div
-          className="absolute left-0 top-6 h-2 rounded-full bg-gradient-to-r from-status-out-for-delivery to-primary"
+          className="absolute left-0 top-6 h-2 rounded-full bg-primary"
           initial={{ width: 0 }}
           animate={{ width: `${progress}%` }}
           transition={{ type: 'spring', stiffness: 60, damping: 18 }}
@@ -50,7 +49,7 @@ export function DeliveryTracker({ tracking }: { tracking: DeliveryTracking }) {
           <motion.span
             animate={{ y: [0, -3, 0] }}
             transition={{ duration: 0.6, repeat: Infinity }}
-            className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg glow-primary"
+            className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm"
           >
             <Bike className="h-4 w-4" />
           </motion.span>

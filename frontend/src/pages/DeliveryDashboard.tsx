@@ -266,7 +266,7 @@ export const DeliveryDashboard: React.FC = () => {
               <CheckCircle className="w-4 h-4" /> Ready for Deliveries
             </span>
             <Link to="/staff/orders">
-              <Button size="lg" className="gap-2 shadow-md shadow-primary/20 shrink-0">
+              <Button size="lg" className="gap-2 shrink-0">
                 <span>Assigned Orders</span>
                 <ArrowRight className="w-4 h-4 stroke-[2.5]" />
               </Button>

@@ -54,6 +54,7 @@ export function StaffCommandCenter() {
 
   // Chime + toast for orders that newly need acceptance.
   useEffect(() => {
+    if (!board.data) return // wait for the first load so existing orders are not announced as new
     const incoming = orders.filter((o) => o.awaitingAcceptance).map((o) => o.id)
     if (seenIncoming.current) {
       const fresh = incoming.filter((id) => !seenIncoming.current!.has(id))
@@ -63,7 +64,7 @@ export function StaffCommandCenter() {
       }
     }
     seenIncoming.current = new Set(incoming)
-  }, [orders, sound])
+  }, [orders, sound, board.data])
 
   // Keep the drawer in sync with live data.
   useEffect(() => {

@@ -61,7 +61,7 @@ export const Navbar: React.FC = () => {
             {showCart && (
               <Link
                 to="/cart"
-                className="relative ml-1 flex items-center gap-2 px-4 py-2 rounded-full font-black text-sm bg-primary hover:bg-primary-hover text-primary-foreground shadow-md shadow-primary/20 transition-all active:scale-95"
+                className="relative ml-1 flex items-center gap-2 px-4 py-2 rounded-full font-black text-sm bg-primary hover:bg-primary-hover text-primary-foreground transition-colors active:scale-95"
               >
                 <ShoppingBag className="w-4 h-4 stroke-[2.5]" />
                 <span>Cart</span>
@@ -103,7 +103,7 @@ export const Navbar: React.FC = () => {
                     </p>
                     <p className="text-[10px] font-bold text-primary uppercase tracking-wider">{ROLE_LABELS[user.role]}</p>
                   </div>
-                  <div className="w-9 h-9 rounded-full bg-brand-gradient text-primary-foreground flex items-center justify-center font-black text-sm shadow-sm">
+                  <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
                     {user.name ? user.name.charAt(0).toUpperCase() : <UserIcon className="w-4 h-4" />}
                   </div>
                 </Link>
@@ -180,7 +180,7 @@ export const Navbar: React.FC = () => {
                     Sign In
                   </Link>
                   <Link to="/register" onClick={() => setMobileMenuOpen(false)}
-                    className="w-full py-3 text-center rounded-2xl font-black text-sm bg-primary text-primary-foreground shadow-md shadow-primary/20">
+                    className="w-full py-3 text-center rounded-2xl font-black text-sm bg-primary text-primary-foreground">
                     Create Account
                   </Link>
                 </div>
@@ -190,7 +190,7 @@ export const Navbar: React.FC = () => {
           {user && (
             <div className="pt-4 border-t border-border flex items-center justify-between">
               <Link to="/account" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-full bg-brand-gradient text-primary-foreground flex items-center justify-center font-bold text-xs">
+                <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
                   {user.name ? user.name.charAt(0).toUpperCase() : <UserIcon className="w-4 h-4" />}
                 </div>
                 <div>

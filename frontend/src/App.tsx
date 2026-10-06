@@ -6,7 +6,6 @@ import { CartProvider } from './context/CartContext'
 import { PageLoader, ProtectedRoute } from './components/ProtectedRoute'
 import { RootRouteResolver } from './components/RootRouteResolver'
 import { Navbar } from './components/Navbar'
-import { ThemeStudio } from './components/ThemeStudio'
 import { Toaster } from './components/ui/sonner'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
@@ -111,7 +110,6 @@ export default function App() {
             <main className="flex-1">
               <AnimatedRoutes />
             </main>
-            <ThemeStudio />
           </div>
         </CartProvider>
       </AuthProvider>

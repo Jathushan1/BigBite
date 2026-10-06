@@ -27,7 +27,7 @@ const DEFAULT_SLIDES: PromoSlide[] = [
     discount: 'SAVE 25% • LKR 3,499',
     ctaText: 'Order Combo',
     ctaLink: '/order',
-    bgGradient: 'from-red-950/90 via-red-900/60 to-black/80',
+    bgGradient: 'from-black/80 via-black/55 to-black/30',
     image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1200&q=80',
   },
   {
@@ -39,7 +39,7 @@ const DEFAULT_SLIDES: PromoSlide[] = [
     discount: 'CODE: CHEESEPULL • 15% OFF',
     ctaText: 'Explore Menu',
     ctaLink: '/order',
-    bgGradient: 'from-warning/90 via-warning/60 to-black/80',
+    bgGradient: 'from-black/80 via-black/55 to-black/30',
     image: 'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=1200&q=80',
   },
   {
@@ -51,7 +51,7 @@ const DEFAULT_SLIDES: PromoSlide[] = [
     discount: 'AUTOMATIC AT CHECKOUT',
     ctaText: 'Satisfy Cravings',
     ctaLink: '/order',
-    bgGradient: 'from-zinc-950/90 via-neutral-900/80 to-black/80',
+    bgGradient: 'from-black/80 via-black/55 to-black/30',
     image: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=1200&q=80',
   },
 ]

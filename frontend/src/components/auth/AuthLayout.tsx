@@ -19,12 +19,7 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
     <div className="min-h-screen grid lg:grid-cols-[1.05fr_1fr] bg-background">
       <aside className="relative hidden lg:flex flex-col justify-between overflow-hidden p-10 text-white">
         <img src={HERO} alt="" className="absolute inset-0 h-full w-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-br from-black/80 via-black/55 to-primary/70" />
-        <motion.div
-          className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary/40 blur-3xl"
-          animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0.8, 0.5] }}
-          transition={{ duration: 6, repeat: Infinity }}
-        />
+        <div className="absolute inset-0 bg-black/65" />
         <Link to="/" className="relative">
           <Logo lightText />
         </Link>

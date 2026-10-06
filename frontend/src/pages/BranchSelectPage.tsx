@@ -57,12 +57,10 @@ export function BranchSelectPage() {
         }}
       />
 
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-3xl bg-brand-gradient p-8 sm:p-10 text-primary-foreground shadow-xl glow-primary">
-        <motion.div className="absolute -right-10 -bottom-16 h-56 w-56 rounded-full bg-white/15 blur-2xl"
-          animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 7, repeat: Infinity }} />
-        <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-80">Step 1 of 3</p>
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-3xl border border-border bg-card p-8 sm:p-10 shadow-xs">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Step 1 of 3</p>
         <h1 className="mt-2 text-3xl sm:text-5xl font-black tracking-tight">Choose your branch</h1>
-        <p className="mt-2 max-w-xl text-sm sm:text-base opacity-90">Each branch has its own menu, hours and delivery riders. Pick the one closest to you.</p>
+        <p className="mt-2 max-w-xl text-sm sm:text-base text-muted-foreground">Each branch has its own menu, hours and delivery riders. Pick the one closest to you.</p>
       </motion.div>
 
       <div className="flex flex-col sm:flex-row gap-3">

@@ -82,7 +82,6 @@ export function MenuPage() {
         animate={{ opacity: 1, y: 0 }}
         className="relative overflow-hidden rounded-3xl border border-border bg-card p-6 sm:p-8 mb-8 shadow-xs"
       >
-        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
         <div className="relative flex flex-col sm:flex-row sm:items-end justify-between gap-6">
           <div>
             <Link to="/order" className="text-muted-foreground hover:text-primary text-xs font-bold inline-flex items-center gap-1">

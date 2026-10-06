@@ -65,7 +65,7 @@ export function TeamPage() {
               <motion.div key={member.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className={cn('rounded-3xl border bg-card p-5 shadow-xs space-y-4', member.status === 'PENDING_APPROVAL' ? 'border-warning/40' : 'border-border')}>
                 <div className="flex items-start gap-3">
-                  <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-gradient text-lg font-black text-primary-foreground">
+                  <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-lg font-bold text-primary">
                     {member.name.charAt(0)}
                   </span>
                   <div className="flex-1">

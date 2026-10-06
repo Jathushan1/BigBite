@@ -94,7 +94,7 @@ export function BranchDetailPage() {
               <div key={method} className="space-y-1.5">
                 <div className="flex justify-between text-sm"><span className="font-semibold">{humanize(method)}</span><span>{formatLKR(value)}</span></div>
                 <div className="h-2 rounded-full bg-secondary">
-                  <motion.div className="h-2 rounded-full bg-brand-gradient" initial={{ width: 0 }} animate={{ width: `${share}%` }} transition={{ duration: 0.8 }} />
+                  <motion.div className="h-2 rounded-full bg-primary" initial={{ width: 0 }} animate={{ width: `${share}%` }} transition={{ duration: 0.8 }} />
                 </div>
               </div>
             )

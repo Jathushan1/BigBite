@@ -19,8 +19,8 @@ export function FoodImage({ src, alt, category, className }: { src?: string | nu
   const Icon = CATEGORY_ICON[(category ?? '').toLowerCase()] ?? UtensilsCrossed
   if (!src || failed) {
     return (
-      <div className={cn('grid place-items-center bg-gradient-to-br from-primary/15 via-accent/10 to-secondary', className)}>
-        <Icon className="h-10 w-10 text-primary/70" />
+      <div className={cn('grid place-items-center bg-secondary', className)}>
+        <Icon className="h-10 w-10 text-muted-foreground/60" />
       </div>
     )
   }

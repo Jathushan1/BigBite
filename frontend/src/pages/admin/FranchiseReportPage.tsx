@@ -60,7 +60,7 @@ export function FranchiseReportPage() {
                 <td className="p-4 text-right font-bold">{formatLKR(s.totalRevenue)}</td>
                 <td className="p-4 w-48">
                   <div className="flex items-center gap-2">
-                    <div className="h-2 flex-1 rounded-full bg-secondary"><motion.div className="h-2 rounded-full bg-brand-gradient" initial={{ width: 0 }} animate={{ width: `${s.revenuePercentage}%` }} /></div>
+                    <div className="h-2 flex-1 rounded-full bg-secondary"><motion.div className="h-2 rounded-full bg-primary" initial={{ width: 0 }} animate={{ width: `${s.revenuePercentage}%` }} /></div>
                     <span className="w-12 text-right text-xs font-semibold">{s.revenuePercentage.toFixed(1)}%</span>
                   </div>
                 </td>

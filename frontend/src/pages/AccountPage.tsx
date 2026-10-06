@@ -48,9 +48,8 @@ export function AccountPage() {
         animate={{ opacity: 1, y: 0 }}
         className="relative overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-sm space-y-6"
       >
-        <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-primary/15 blur-3xl" />
         <div className="relative flex items-center gap-4">
-          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-brand-gradient text-2xl font-black text-primary-foreground shadow-lg glow-primary">
+          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-primary/10 text-2xl font-bold text-primary">
             {user.name.charAt(0).toUpperCase()}
           </div>
           <div>

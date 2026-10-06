@@ -25,12 +25,10 @@ function CardPreview({ number, name, expiry, cvc, flipped }: { number: string; n
         transition={{ type: 'spring', stiffness: 140, damping: 18 }}
         className="relative aspect-[1.586] w-full [transform-style:preserve-3d]"
       >
-        <div className="absolute inset-0 rounded-3xl bg-brand-gradient p-6 text-white shadow-2xl glow-primary [backface-visibility:hidden] overflow-hidden">
-          <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/15" />
-          <div className="absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-black/10" />
+        <div className="absolute inset-0 rounded-3xl bg-neutral-800 p-6 text-white shadow-md [backface-visibility:hidden] overflow-hidden">
           <div className="relative flex h-full flex-col justify-between">
             <div className="flex items-center justify-between">
-              <div className="h-9 w-12 rounded-md bg-gradient-to-br from-yellow-200 to-yellow-500 opacity-90" />
+              <div className="h-9 w-12 rounded-md bg-neutral-400/80" />
               <Wifi className="h-6 w-6 rotate-90 opacity-80" />
             </div>
             <p className="font-mono text-xl tracking-[0.12em] sm:text-2xl">{shown}</p>
@@ -47,7 +45,7 @@ function CardPreview({ number, name, expiry, cvc, flipped }: { number: string; n
             </div>
           </div>
         </div>
-        <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-zinc-800 to-zinc-950 text-white shadow-2xl [backface-visibility:hidden] [transform:rotateY(180deg)] overflow-hidden">
+        <div className="absolute inset-0 rounded-3xl bg-neutral-900 text-white shadow-md [backface-visibility:hidden] [transform:rotateY(180deg)] overflow-hidden">
           <div className="mt-6 h-11 w-full bg-black" />
           <div className="mx-6 mt-5 flex items-center justify-end rounded-md bg-white/90 px-3 py-2 font-mono text-sm text-black">{cvc || '•••'}</div>
           <p className="mx-6 mt-3 text-[10px] opacity-60">Security code — never stored by BigBite</p>
