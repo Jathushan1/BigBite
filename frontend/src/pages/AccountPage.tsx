@@ -14,7 +14,7 @@ import { ROLE_NAV } from '@/lib/navigation'
 import { ROLE_LABELS } from '@/types/auth'
 
 export function AccountPage() {
-  const { user, logout } = useAuth()
+  const { user, logout, requestLogout } = useAuth()
   const navigate = useNavigate()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
@@ -33,7 +33,7 @@ export function AccountPage() {
       await changePasswordApi(current, next)
       toast.success('Password changed', { description: 'Please sign in again with your new password.' })
       logout()
-      navigate('/login')
+      navigate('/login', { replace: true })
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -89,7 +89,7 @@ export function AccountPage() {
             ))}
           </div>
         </div>
-        <Button variant="outline" className="relative w-full" onClick={() => { logout(); navigate('/') }}>
+        <Button variant="outline" className="relative w-full" onClick={requestLogout}>
           <LogOut className="h-4 w-4" /> Sign out
         </Button>
       </motion.section>

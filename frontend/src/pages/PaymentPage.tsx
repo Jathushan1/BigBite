@@ -152,8 +152,7 @@ export function PaymentPage() {
   }
 
   const methods: { value: PaymentMethod; label: string; icon: typeof CreditCard; disabled?: boolean; note?: string }[] = [
-    { value: 'CREDIT_CARD', label: 'Credit card', icon: CreditCard },
-    { value: 'DEBIT_CARD', label: 'Debit card', icon: CreditCard },
+    { value: 'CREDIT_CARD', label: 'Card', icon: CreditCard },
     { value: 'CASH_ON_DELIVERY', label: 'Cash', icon: Banknote, disabled: !options.codEligible, note: options.codEligible ? undefined : options.codMessage ?? undefined },
   ]
 
@@ -174,7 +173,7 @@ export function PaymentPage() {
             <h1 className="mt-1 text-2xl sm:text-3xl font-black">Pay for order #{order.id}</h1>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {methods.map((m) => (
               <button
                 key={m.value}

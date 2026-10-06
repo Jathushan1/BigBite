@@ -16,7 +16,7 @@ const HIDDEN_ON = ['/login', '/register', '/forgot-password', '/reset-password']
 
 export const Navbar: React.FC = () => {
   const { totalCount } = useCart()
-  const { user, logout } = useAuth()
+  const { user, requestLogout } = useAuth()
   const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -109,7 +109,7 @@ export const Navbar: React.FC = () => {
                 </Link>
                 <button
                   type="button"
-                  onClick={logout}
+                  onClick={requestLogout}
                   className="p-2 rounded-xl text-muted-foreground hover:text-primary hover:bg-secondary transition-colors cursor-pointer"
                   title="Sign out"
                 >
@@ -201,8 +201,8 @@ export const Navbar: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  logout()
                   setMobileMenuOpen(false)
+                  requestLogout()
                 }}
                 className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-primary p-2 rounded-xl hover:bg-secondary cursor-pointer"
               >

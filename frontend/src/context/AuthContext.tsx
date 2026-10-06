@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react'
 import type { Role, User } from '../types/auth'
 import { getMeApi, loginApi } from '../services/api'
 import { getRoleLandingPath } from '@/lib/navigation'
+import { useNavigate } from 'react-router-dom'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 export { getRoleLandingPath }
 
@@ -11,6 +13,8 @@ interface AuthContextType {
   isLoading: boolean
   login: (email: string, pass: string) => Promise<Role>
   logout: () => void
+  /** Asks for confirmation, then signs out and goes straight to the sign-in page. */
+  requestLogout: () => void
   refreshUser: () => Promise<void>
   getRoleLandingPath: (role: Role) => string
 }
@@ -21,6 +25,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'))
   const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [confirmingLogout, setConfirmingLogout] = useState(false)
+  const navigate = useNavigate()
 
   useEffect(() => {
     async function loadUser() {
@@ -76,6 +82,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }
 
+  const confirmLogout = () => {
+    setConfirmingLogout(false)
+    logout()
+    navigate('/login', { replace: true })
+  }
+
   const logout = () => {
     localStorage.removeItem('token')
     setToken(null)
@@ -83,8 +95,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout, refreshUser, getRoleLandingPath }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout, requestLogout: () => setConfirmingLogout(true), refreshUser, getRoleLandingPath }}>
       {children}
+      <ConfirmDialog
+        open={confirmingLogout}
+        onOpenChange={setConfirmingLogout}
+        title="Sign out?"
+        description={user ? `You are signed in as ${user.name}. You'll be taken to the sign-in page.` : "You'll be taken to the sign-in page."}
+        confirmText="Sign out"
+        onConfirm={confirmLogout}
+      />
     </AuthContext.Provider>
   )
 }

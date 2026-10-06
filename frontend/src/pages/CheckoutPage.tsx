@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
-import { placeOrder, getSavedAddresses } from '../api/orderApi'
+import { placeOrder, getSavedAddresses, getOrderHistory } from '../api/orderApi'
 import { getPublicBranch } from '@/api/branchApi'
 import { useAsync } from '@/hooks/useAsync'
 import { Button } from '@/components/ui/button'
@@ -58,7 +58,8 @@ export function CheckoutPage() {
   const [contactName, setContactName] = useState(user?.name || '')
   const [contactPhone, setContactPhone] = useState(user?.phoneNumber || '')
   const [contactEmail, setContactEmail] = useState(user?.email || '')
-  const [saveAddress, setSaveAddress] = useState(false)
+  // Signed-in customers keep their address for next time, so checkout can prefill it
+  const [saveAddress, setSaveAddress] = useState(user?.role === 'CUSTOMER')
 
   // Saved addresses from backend
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([])
@@ -79,11 +80,13 @@ export function CheckoutPage() {
     [branchId]
   )
 
+  // Prefill contact details from the signed-in customer's profile
   useEffect(() => {
     if (user) {
       if (!contactName) setContactName(user.name || '')
       if (!contactPhone && user.phoneNumber) setContactPhone(user.phoneNumber)
       if (!contactEmail) setContactEmail(user.email || '')
+      if (user.role === 'CUSTOMER') setSaveAddress(true)
     }
   }, [user])
 
@@ -91,12 +94,20 @@ export function CheckoutPage() {
     if (user?.id) {
       setLoadingAddresses(true)
       getSavedAddresses(user.id)
-        .then((data) => {
+        .then(async (data) => {
           setSavedAddresses(data)
-          if (data.length > 0 && !deliveryAddress.trim()) {
+          if (deliveryAddress.trim()) return
+          if (data.length > 0) {
             setSelectedSavedAddressId(data[0].id)
             setDeliveryAddress(data[0].addressLine)
             if (data[0].city) setCity(data[0].city)
+            return
+          }
+          // No saved address yet: reuse the address of the customer's most recent delivery
+          if (user.role === 'CUSTOMER') {
+            const previous = (await getOrderHistory().catch(() => []))
+              .find((order) => order.fulfillmentType === 'DELIVERY' && order.deliveryAddress)
+            if (previous?.deliveryAddress) setDeliveryAddress(previous.deliveryAddress)
           }
         })
         .catch((err) => {
@@ -254,7 +265,7 @@ export function CheckoutPage() {
             <div>
               <h2 className="text-lg font-bold text-foreground">Contact Information</h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Recipient details for this order
+                {user?.role === 'CUSTOMER' ? 'Filled in from your profile — change anything you need' : 'Recipient details for this order'}
               </p>
             </div>
             {user && (
