@@ -1,5 +1,12 @@
 package com.example.BigBite.order;
 
+import com.example.BigBite.order.entity.Order;
+import com.example.BigBite.order.enums.FulfillmentType;
+import com.example.BigBite.order.enums.OrderStatus;
+import com.example.BigBite.order.enums.PaymentMethod;
+import com.example.BigBite.order.enums.PaymentStatus;
+import com.example.BigBite.order.enums.RefundStatus;
+import com.example.BigBite.order.repository.OrderRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

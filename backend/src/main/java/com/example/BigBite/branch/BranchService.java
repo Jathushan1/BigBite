@@ -3,7 +3,7 @@ package com.example.BigBite.branch;
 import com.example.BigBite.auth.exception.ResourceNotFoundException;
 import com.example.BigBite.auth.UserRepository;
 import com.example.BigBite.menu.repository.MenuItemRepository;
-import com.example.BigBite.order.OrderRepository;
+import com.example.BigBite.order.repository.OrderRepository;
 import com.example.BigBite.branch.dto.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
