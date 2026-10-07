@@ -1,11 +1,11 @@
 package com.example.BigBite.branch;
 
-import com.example.BigBite.order.FulfillmentType;
-import com.example.BigBite.order.Order;
-import com.example.BigBite.order.OrderItem;
-import com.example.BigBite.order.OrderRepository;
-import com.example.BigBite.order.OrderStatus;
-import com.example.BigBite.order.PaymentMethod;
+import com.example.BigBite.order.enums.FulfillmentType;
+import com.example.BigBite.order.entity.Order;
+import com.example.BigBite.order.entity.OrderItem;
+import com.example.BigBite.order.repository.OrderRepository;
+import com.example.BigBite.order.enums.OrderStatus;
+import com.example.BigBite.order.enums.PaymentMethod;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

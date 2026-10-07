@@ -67,5 +67,5 @@ cd frontend && npm run build       # type-check and production build
 - `auth` – registration per role, login, JWT, approvals (admin for managers, managers for their team), forgot/reset/change password.
 - `branch` – branch CRUD, public directory, manager's own branch, sales and monthly reports (fed automatically by completed orders).
 - `menu` – menu items per branch with availability; public read, manager/admin write. Design patterns explained in [MENU_MODULE_DESIGN_PATTERNS.md](MENU_MODULE_DESIGN_PATTERNS.md).
-- `order` – the order lifecycle; see [ORDER_MODULE_README.md](ORDER_MODULE_README.md). Delivery, inventory, promotions, reviews, complaints, payment and refund gateways are mocked behind interfaces in `order/external/` until those modules exist.
+- `order` – the order lifecycle; see [ORDER_MODULE_README.md](ORDER_MODULE_README.md). Delivery, inventory, promotions, reviews, complaints, payment and refund gateways are mocked behind interfaces in `order/external/` (mocks in `order/external/mock/`) until those modules exist. The module is laid out like the menu module: `controller/`, `service/`, `security/`, `entity/`, `enums/`, `repository/`, `exception/`, `dto/request/`, `dto/response/`, `event/`, `external/`.
 - `common` – one JSON error format for every endpoint, email sending, rate limiting.

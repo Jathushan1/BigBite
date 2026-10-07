@@ -212,7 +212,7 @@ _Only the right people can see or move an order._
 ## Observations
 
 - **Response times:** average 1416 ms per request (requests that reach the database took roughly 0.6–2.5 s, longest 3.3 s; requests rejected before the database answered in under 0.3 s). Nearly all of this is the network round trip to the Aiven cloud database. In-memory tests of the same logic run in milliseconds.
-- **Mocked neighbours:** payment and refund gateways, inventory, promotions, delivery tracking, reviews and complaints are mock implementations behind interfaces (`order/external`) until those modules are built. Reviews and complaints are kept in memory and reset when the server restarts.
+- **Mocked neighbours:** payment and refund gateways, inventory, promotions, delivery tracking, reviews and complaints are mock implementations behind interfaces (`order/external`, with the mocks in `order/external/mock`) until those modules are built. Reviews and complaints are kept in memory and reset when the server restarts.
 - **Data left behind:** the run created two test customers and seven orders at BigBite Colombo 03 (two completed, the others cancelled or rejected, plus one still preparing from TC-05). They appear in the branch's history and sales report.
 
 ## How to re-run

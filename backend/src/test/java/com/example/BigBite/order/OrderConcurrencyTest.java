@@ -1,5 +1,9 @@
 package com.example.BigBite.order;
 
+import com.example.BigBite.order.entity.Order;
+import com.example.BigBite.order.enums.FulfillmentType;
+import com.example.BigBite.order.enums.OrderStatus;
+import com.example.BigBite.order.repository.OrderRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import org.junit.jupiter.api.Test;

@@ -44,7 +44,7 @@ These defaults are configurable in `backend/src/main/resources/application.prope
 ## Connections to other modules
 
 Real modules: branches and menu items are read from the branch and menu tables (`JpaBranchLookupService`, `JpaMenuLookupService`).
-Mocked until those modules exist (`order/external/Mock*`): payment gateway, refund gateway, inventory, promotions (`WELCOME10`), delivery (rider availability and simulated tracking), reviews and complaints (in memory).
+Mocked until those modules exist (`order/external/mock/`): payment gateway, refund gateway, inventory, promotions (`WELCOME10`), delivery (rider availability and simulated tracking), reviews and complaints (in memory).
 
 ## API
 

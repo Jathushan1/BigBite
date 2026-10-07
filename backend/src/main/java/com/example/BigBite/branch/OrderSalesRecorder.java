@@ -1,8 +1,8 @@
 package com.example.BigBite.branch;
 
-import com.example.BigBite.order.Order;
-import com.example.BigBite.order.OrderItem;
-import com.example.BigBite.order.OrderRepository;
+import com.example.BigBite.order.entity.Order;
+import com.example.BigBite.order.entity.OrderItem;
+import com.example.BigBite.order.repository.OrderRepository;
 import com.example.BigBite.order.event.OrderEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
