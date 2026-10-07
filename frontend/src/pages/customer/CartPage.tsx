@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Trash2, Plus, Minus, ArrowRight, ArrowLeft, Tag, AlertCircle, ShoppingBag, Check } from 'lucide-react'
-import { useCart } from '../context/CartContext'
+import { useCart } from '@/context/CartContext'
 import { getPublicBranch } from '@/api/branchApi'
 import { useAsync } from '@/hooks/useAsync'
 import { EmptyState } from '@/components/EmptyState'

@@ -15,16 +15,16 @@ import {
   ShieldCheck,
   Building,
 } from 'lucide-react'
-import { useCart } from '../context/CartContext'
-import { useAuth } from '../context/AuthContext'
-import { placeOrder, getSavedAddresses, getOrderHistory } from '../api/orderApi'
+import { useCart } from '@/context/CartContext'
+import { useAuth } from '@/context/AuthContext'
+import { placeOrder, getSavedAddresses, getOrderHistory } from '@/api/orderApi'
 import { getPublicBranch } from '@/api/branchApi'
 import { useAsync } from '@/hooks/useAsync'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/sonner'
 import { cn } from '@/lib/utils'
-import type { SavedAddress, OrderRequest } from '../types/order'
+import type { SavedAddress, OrderRequest } from '@/types/order'
 
 const MIN_ORDER_SUBTOTAL = 500
 const MAX_DISTINCT_ITEMS = 20

@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { AlertTriangle, ArrowLeft, Banknote, CreditCard, Lock, ShieldCheck, Sparkles, Wifi } from 'lucide-react'
-import { getOrder, getPaymentOptions, submitPayment } from '../api/orderApi'
+import { getOrder, getPaymentOptions, submitPayment } from '@/api/orderApi'
 import { ApiError, errorMessage } from '@/lib/http'
 import { useAsync } from '@/hooks/useAsync'
 import { Button } from '@/components/ui/button'
@@ -13,7 +13,7 @@ import { toast } from '@/components/ui/sonner'
 import { cn } from '@/lib/utils'
 import { formatLKR } from '@/lib/format'
 import { TEST_CARDS, cardBrand, formatCardNumber, passesLuhn } from '@/lib/card'
-import type { PaymentDeclined, PaymentMethod } from '../types/order'
+import type { PaymentDeclined, PaymentMethod } from '@/types/order'
 
 function CardPreview({ number, name, expiry, cvc, flipped }: { number: string; name: string; expiry: string; cvc: string; flipped: boolean }) {
   const brand = cardBrand(number)

@@ -1,10 +1,10 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Utensils, ShieldCheck, Zap, Award, Sparkles, Heart, Star, Pizza, ChevronRight } from 'lucide-react'
-import { Logo } from '../components/Logo'
-import { useAuth } from '../context/AuthContext'
+import { Logo } from '@/components/Logo'
+import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
-import { PromoCarousel } from '../components/PromoCarousel'
+import { PromoCarousel } from '@/components/PromoCarousel'
 
 export const WelcomePage: React.FC = () => {
   const { user } = useAuth()

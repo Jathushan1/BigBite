@@ -7,24 +7,24 @@ import { PageLoader, ProtectedRoute } from './components/ProtectedRoute'
 import { RootRouteResolver } from './components/RootRouteResolver'
 import { Navbar } from './components/Navbar'
 import { Toaster } from './components/ui/sonner'
-import { LoginPage } from './pages/LoginPage'
-import { RegisterPage } from './pages/RegisterPage'
-import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
-import { ResetPasswordPage } from './pages/ResetPasswordPage'
-import { AccountPage } from './pages/AccountPage'
-import { BranchSelectPage } from './pages/BranchSelectPage'
-import { MenuPage } from './pages/MenuPage'
-import { CartPage } from './pages/CartPage'
-import { CheckoutPage } from './pages/CheckoutPage'
-import { PaymentPage } from './pages/PaymentPage'
-import { OrderStatusPage } from './pages/OrderStatusPage'
-import { OrderHistoryPage } from './pages/OrderHistoryPage'
+import { LoginPage } from './pages/auth/LoginPage'
+import { RegisterPage } from './pages/auth/RegisterPage'
+import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage'
+import { ResetPasswordPage } from './pages/auth/ResetPasswordPage'
+import { AccountPage } from './pages/account/AccountPage'
+import { BranchSelectPage } from './pages/customer/BranchSelectPage'
+import { MenuPage } from './pages/customer/MenuPage'
+import { CartPage } from './pages/customer/CartPage'
+import { CheckoutPage } from './pages/customer/CheckoutPage'
+import { PaymentPage } from './pages/customer/PaymentPage'
+import { OrderStatusPage } from './pages/customer/OrderStatusPage'
+import { OrderHistoryPage } from './pages/customer/OrderHistoryPage'
 import type { Role } from './types/auth'
 
 // Branch-side and admin pages load on demand to keep the customer bundle small.
-const StaffCommandCenter = lazy(() => import('./pages/StaffCommandCenter').then((m) => ({ default: m.StaffCommandCenter })))
-const DeliveryDashboard = lazy(() => import('./pages/DeliveryDashboard').then((m) => ({ default: m.DeliveryDashboard })))
-const MenuManagementPage = lazy(() => import('./pages/MenuManagementPage').then((m) => ({ default: m.MenuManagementPage })))
+const StaffCommandCenter = lazy(() => import('./pages/staff/StaffCommandCenter').then((m) => ({ default: m.StaffCommandCenter })))
+const DeliveryDashboard = lazy(() => import('./pages/delivery/DeliveryDashboard').then((m) => ({ default: m.DeliveryDashboard })))
+const MenuManagementPage = lazy(() => import('./pages/manager/MenuManagementPage').then((m) => ({ default: m.MenuManagementPage })))
 const ManagerDashboard = lazy(() => import('./pages/manager/ManagerDashboard').then((m) => ({ default: m.ManagerDashboard })))
 const ManagerOrdersPage = lazy(() => import('./pages/manager/ManagerOrdersPage').then((m) => ({ default: m.ManagerOrdersPage })))
 const TeamPage = lazy(() => import('./pages/manager/TeamPage').then((m) => ({ default: m.TeamPage })))
@@ -33,7 +33,7 @@ const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage').then((m
 const BranchManagementPage = lazy(() => import('./pages/admin/BranchManagementPage').then((m) => ({ default: m.BranchManagementPage })))
 const BranchDetailPage = lazy(() => import('./pages/admin/BranchDetailPage').then((m) => ({ default: m.BranchDetailPage })))
 const FranchiseReportPage = lazy(() => import('./pages/admin/FranchiseReportPage').then((m) => ({ default: m.FranchiseReportPage })))
-const DevOutboxPage = lazy(() => import('./pages/DevOutboxPage').then((m) => ({ default: m.DevOutboxPage })))
+const DevOutboxPage = lazy(() => import('./pages/dev/DevOutboxPage').then((m) => ({ default: m.DevOutboxPage })))
 
 const guard = (roles: Role[], element: React.ReactNode) => <ProtectedRoute allowedRoles={roles}>{element}</ProtectedRoute>
 

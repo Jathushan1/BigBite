@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '@/context/AuthContext'
 import {
   Bike,
   MapPin,
@@ -12,10 +12,10 @@ import {
   Banknote,
   Phone,
 } from 'lucide-react'
-import { getOrders, updateOrderStatus, collectCod, markDeliveryFailed } from '../api/orderApi'
-import type { OrderResponse, OrderStatus } from '../types/order'
-import { ResponsiveDataView, type ColumnDef } from '../components/ResponsiveDataView'
-import { StatusBadge } from '../components/StatusBadge'
+import { getOrders, updateOrderStatus, collectCod, markDeliveryFailed } from '@/api/orderApi'
+import type { OrderResponse, OrderStatus } from '@/types/order'
+import { ResponsiveDataView, type ColumnDef } from '@/components/ResponsiveDataView'
+import { StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/sonner'
 import { cn } from '@/lib/utils'

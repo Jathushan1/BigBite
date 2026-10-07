@@ -7,11 +7,11 @@ import {
 } from 'lucide-react'
 import {
   cancelOrder, claimGuestOrders, getOrder, getOrderBill, getStatusHistory, getTracking, requestCancellation, updateOrderItem,
-} from '../api/orderApi'
+} from '@/api/orderApi'
 import { useAsync, usePolling } from '@/hooks/useAsync'
-import { useAuth } from '../context/AuthContext'
-import { StatusStepper } from '../components/StatusStepper'
-import { StatusBadge } from '../components/StatusBadge'
+import { useAuth } from '@/context/AuthContext'
+import { StatusStepper } from '@/components/StatusStepper'
+import { StatusBadge } from '@/components/StatusBadge'
 import { DeliveryTracker } from '@/components/order/DeliveryTracker'
 import { OrderFeedback } from '@/components/order/OrderFeedback'
 import { PageLoader } from '@/components/ProtectedRoute'
